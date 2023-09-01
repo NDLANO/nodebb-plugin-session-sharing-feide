@@ -32,7 +32,7 @@ const profileFields = [
 	'aboutme',
 ];
 const payloadKeys = profileFields.concat([
-	'id', // the uniq identifier of that account
+	'sub', // the uniq identifier of that account
 	'firstName', // for backwards compatibillity
 	'lastName', // dto.
 	'picture',
@@ -43,7 +43,7 @@ const plugin = {
 	ready: false,
 	settings: {
 		name: 'appId',
-		cookieName: 'token',
+		headerName: 'authorization',
 		cookieDomain: undefined,
 		secret: '',
 		behaviour: 'trust',
@@ -126,65 +126,12 @@ plugin.getUser = async (remoteId) => {
 };
 
 plugin.process = async (token) => {
-	const payload = await jwt.verify(token, plugin.settings.secret);
-	const userData = await plugin.normalizePayload(payload);
+	const userData = await this.validateToken(token);
 	const [uid, isNewUser] = await plugin.findOrCreateUser(userData);
 	await plugin.updateUserProfile(uid, userData, isNewUser);
 	await plugin.updateUserGroups(uid, userData);
 	await plugin.verifyUser(token, uid, isNewUser);
 	return uid;
-};
-
-plugin.normalizePayload = async (payload) => {
-	const userData = {};
-
-	if (plugin.settings.payloadParent) {
-		payload = payload[plugin.settings.payloadParent];
-	}
-
-	if (typeof payload !== 'object') {
-		winston.warn('[session-sharing] the payload is not an object', payload);
-		throw new Error('payload-invalid');
-	}
-
-	payloadKeys.forEach(function (key) {
-		const propName = plugin.settings['payload:' + key];
-		if (payload[propName]) {
-			userData[key] = payload[propName];
-		}
-	});
-
-	if (!userData.id) {
-		winston.warn('[session-sharing] No user id was given in payload');
-		throw new Error('payload-invalid');
-	}
-
-	userData.fullname = (userData.fullname || [userData.firstName, userData.lastName].join(' ')).trim();
-
-	if (!userData.username) {
-		userData.username = userData.fullname;
-	}
-
-	/* strip username from illegal characters */
-	userData.username = userData.username.trim().replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
-
-	if (!userData.username) {
-		winston.warn('[session-sharing] No valid username could be determined');
-		throw new Error('payload-invalid');
-	}
-
-	if (userData.hasOwnProperty('groups') && !Array.isArray(userData.groups)) {
-		winston.warn('[session-sharing] Array expected for `groups` in JWT payload. Ignoring.');
-		delete userData.groups;
-	}
-
-	winston.verbose('[session-sharing] Payload verified');
-	const data = await plugins.hooks.fire('filter:sessionSharing.normalizePayload', {
-		payload: payload,
-		userData: userData,
-	});
-
-	return data.userData;
 };
 
 plugin.verifyUser = async (token, uid, isNewUser) => {
@@ -352,6 +299,8 @@ plugin.createUser = async (userData) => {
 };
 
 plugin.addMiddleware = async function ({ req, res }) {
+	console.log(req, res)
+	winston.verbose('[session-sharing] test rebuild');
 	const { hostWhitelist, guestRedirect, editOverride, loginOverride, registerOverride } = await meta.settings.get('session-sharing');
 
 	if (hostWhitelist) {
@@ -417,10 +366,10 @@ plugin.addMiddleware = async function ({ req, res }) {
 		return handleGuest.call(null, req, res);
 	}
 
-	if (Object.keys(req.cookies).length && req.cookies.hasOwnProperty(plugin.settings.cookieName) && req.cookies[plugin.settings.cookieName].length) {
+	if (Object.keys(req.headers.authorization).length && req.headers.hasOwnProperty(plugin.headers.authorization) && req.authorization[plugin.settings.authorization].length) {
 		try {
-			const uid = await plugin.process(req.cookies[plugin.settings.cookieName]);
-			if (uid === req.uid) {
+			const uid = await plugin.process(req.header.authorization);
+			if (uid === req.sub) {
 				winston.verbose(`[session-sharing] Re-validated login for uid ${uid}, path ${req.originalUrl}`);
 				return;
 			}
@@ -476,25 +425,6 @@ plugin.addMiddleware = async function ({ req, res }) {
 	}
 };
 
-plugin.cleanup = async (data) => {
-	if (plugin.settings.cookieDomain) {
-		winston.verbose('[session-sharing] Clearing cookie');
-		data.res.clearCookie(plugin.settings.cookieName, {
-			domain: plugin.settings.cookieDomain,
-			expires: new Date(),
-			path: '/',
-		});
-	}
-
-	data.res.clearCookie('nbb_token', {
-		domain: plugin.settings.cookieDomain,
-		expires: new Date(),
-		path: '/',
-	});
-
-	return true;
-};
-
 plugin.generate = function (req, res) {
 	if (!plugin.ready) {
 		return res.sendStatus(404);
@@ -522,7 +452,7 @@ plugin.generate = function (req, res) {
 	}
 
 	const token = jwt.sign(payload, plugin.settings.secret);
-	res.cookie(plugin.settings.cookieName, token, {
+	res.cookie(plugin.settings.headerName, token, {
 		maxAge: 1000 * 60 * 60 * 24 * 21,
 		httpOnly: true,
 		domain: plugin.settings.cookieDomain,
@@ -548,10 +478,6 @@ plugin.reloadSettings = async (data) => {
 	}
 
 	const settings = await meta.settings.get('session-sharing');
-	if (!settings.hasOwnProperty('secret') || !settings.secret.length) {
-		winston.error('[session-sharing] JWT Secret not found, session sharing disabled.');
-		return;
-	}
 
 	// If "payload:parent" is found, but payloadParent is not, update the latter and delete the former
 	if (!settings.payloadParent && settings['payload:parent']) {
@@ -592,7 +518,7 @@ plugin.saveReverseToken = async ({ req, userData: data }) => {
 	}
 
 	const res = req.res;
-	const userData = await user.getUserFields(data.uid, ['uid', 'username', 'picture', 'reputation', 'postcount', 'banned']);
+	const userData = await user.getUserFields(data.uid, ['sub', 'username', 'picture', 'reputation', 'postcount', 'banned']);
 	userData.groups = (await groups.getUserGroups([data.uid])).pop();
 	const token = jwt.sign(userData, plugin.settings.secret);
 
@@ -603,6 +529,89 @@ plugin.saveReverseToken = async ({ req, userData: data }) => {
 	});
 
 	winston.info(`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`);
+};
+
+plugin.validateToken = async ({token}) => {
+	const url = 'https://auth.dataporten.no/openid/userinfo';
+
+	try {
+		const response = await fetch(url, {
+		headers: {
+			Authorization: token
+		}
+		});
+
+		if (response.ok) {
+			const userInfo = await response.json();
+			// Perform any additional validation checks on the userInfo object if needed
+			winston.info('ID is valid:', userInfo);
+			return userInfo
+		} else {
+			winston.warn('[session-sharing] ID is invalid');
+		}
+	} catch (error) {
+		winston.warn('[session-sharing] An error occurred'), error;
+		throw new Error('An error occurred while validating ID');
+	} 
+}
+
+
+plugin.receiveID = function(req, res) {
+	var hasSession = req.hasOwnProperty('user') && req.user.hasOwnProperty('sub') && parseInt(req.user.uid, 10) > 0;
+	var hasAuthorization = req.headers.authorization?.length > 0;
+  	var isBlacklisted = meta.blacklist.test(req.ip);
+
+	if (isBlacklisted) {
+		if (hasSession) {
+			req.logout();
+			res.locals.fullRefresh = true;
+		}
+	}
+
+	if (hasAuthorization) {
+		return plugin.process(req.header.authorization, function(err, uid) {
+			if (err) {
+				switch(err.message) {
+					case 'banned':
+						winston.info('[session-sharing] uid ' + uid + ' is banned, not logging them in');
+						break;
+					case 'payload-invalid':
+						winston.warn('[session-sharing] The passed-in payload was invalid and could not be processed');
+						break;
+					default:
+						winston.warn('[session-sharing] Error encountered while parsing authentication token: ' + err.message);
+						break;
+				}
+
+				return res.sendStatus(500);
+			}
+
+			winston.info('[session-sharing] Processing login for uid ' + uid);
+			req.uid = uid;
+			nbbAuthController.doLogin(req, uid, function(err) {
+				if (err) {
+					return res.sendStatus(403);
+				}
+
+				if (!req.session.returnTo) {
+					res.redirect(302, nconf.get('relative_path') + '/');
+			  } else {
+					var next = req.session.returnTo;
+					delete req.session.returnTo;
+					res.redirect(302, next);
+				}
+			});
+		});
+	} else if (hasSession) {
+		// Has login session but no cookie, logout
+		req.logout();
+		res.locals.fullRefresh = true;
+		handleGuest.apply(null, arguments);
+	} else {
+		handleGuest.apply(null, arguments);
+	}
+
+	res.sendStatus(200);
 };
 
 module.exports = plugin;

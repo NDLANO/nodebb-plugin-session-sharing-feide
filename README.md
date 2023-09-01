@@ -1,3 +1,6 @@
+# IMPORTANT INFO:
+
+NOTE: THIS IS JUST A TEST FORK FOR CREATING A METHOD FOR AUTHENTICATING USING FEIDE AUTH WITH NODEBB WITH CUSTOM FRONTEND. THIS PACKAGE IS UNDER TESTING AND RELEASED TO SIMPLIFY TESTING.
 # Session Sharing for NodeBB
 
 In a nutshell, this plugin allows you to share sessions between your application and NodeBB. You'll need to set a

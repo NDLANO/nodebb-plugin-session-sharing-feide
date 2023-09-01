@@ -1,9 +1,9 @@
 {
-	"id": "nodebb-plugin-session-sharing",
-	"url": "https://github.com/julianlam/nodebb-plugin-session-sharing",
+	"id": "nodebb-plugin-session-sharing-feide",
+	"url": "https://github.com/NDLANO/nodebb-plugin-session-sharing-feide",
 	"library": "./library.js",
 	"hooks": [
-		{ "hook": "response:router.page", "method": "addMiddleware" },
+		{ "hook": "action:connected", "method": "addMiddleware" },
 		{ "hook": "static:app.load", "method": "init" },
 		{ "hook": "filter:admin.header.build", "method": "addAdminNavigation" },
 		{ "hook": "static:user.loggedOut", "method": "cleanup" },

@@ -1,23 +1,19 @@
 {
-  "name": "nodebb-plugin-session-sharing",
-  "version": "7.1.2",
+  "name": "nodebb-plugin-feide-integration-test",
+  "version": "0.0.1-alpha.0",
   "description": "Allows login sessions from your app to persist in NodeBB",
   "main": "library.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/julianlam/nodebb-plugin-session-sharing"
+    "url": "https://github.com/NDLANO/nodebb-plugin-session-sharing-feide"
   },
   "keywords": [
     "nodebb",
     "plugin"
   ],
-  "author": {
-    "name": "Julian Lam",
-    "email": "julian@nodebb.org"
-  },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/julianlam/nodebb-plugin-session-sharing/issues"
+    "url": "https://github.com/NDLANO/nodebb-plugin-session-sharing-feide"
   },
   "readmeFilename": "README.md",
   "nbbpm": {
@@ -41,7 +37,8 @@
     "eslint": "^7.7.0",
     "jsonwebtoken": "^8.5.1",
     "lint-staged": "^10.0.9",
-    "lodash": "^4.17.14"
+    "lodash": "^4.17.14",
+    "fetch": "^2.6.1"
   },
   "devDependencies": {
     "@commitlint/cli": "^9.1.2",
