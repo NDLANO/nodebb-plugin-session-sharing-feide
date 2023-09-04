@@ -35,10 +35,9 @@ const profileFields = [
 ];
 const payloadKeys = profileFields.concat([
 	'sub', // the uniq identifier of that account
-	'firstName', // for backwards compatibillity
-	'lastName', // dto.
 	'picture',
 	'groups',
+	'name',
 ]);
 
 const plugin = {
@@ -131,12 +130,66 @@ plugin.process = async (token) => {
 	winston.verbose('sdjakdjskodnq');
 	winston.verbose(token);
 	const userData = await plugin.validateToken(token);
-	winston.verbose(JSON.stringify(userData));
-	const [uid, isNewUser] = await plugin.findOrCreateUser(userData);
-	/*await plugin.updateUserProfile(uid, userData, isNewUser);
+	const normalizedUserData = await plugin.normalizePayload(userData);
+	winston.verbose(JSON.stringify(normalizedUserData));
+	const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
+	await plugin.updateUserProfile(uid, userData, isNewUser);
 	await plugin.updateUserGroups(uid, userData);
 	await plugin.verifyUser(token, uid, isNewUser);
-	return uid; */
+	return uid;
+};
+
+plugin.normalizePayload = async (payload) => {
+	console.log(payload)
+	const userData = {};
+
+	if (plugin.settings.payloadParent) {
+		payload = payload[plugin.settings.payloadParent];
+	}
+
+	if (typeof payload !== 'object') {
+		winston.warn('[session-sharing] the payload is not an object', payload);
+		throw new Error('payload-invalid');
+	}
+
+	payloadKeys.forEach(function (key) {
+		const propName = plugin.settings['payload:' + key];
+		if (payload[propName]) {
+			userData[key] = payload[propName];
+		}
+	});
+	console.log(userData);
+	if (!userData.sub) {
+		winston.warn('[session-sharing] No user id was given in payload');
+		throw new Error('payload-invalid');
+	}
+
+	userData.fullname = (userData.fullname || userData.name || [userData.firstName, userData.lastName].join(' ')).trim();
+
+	if (!userData.username) {
+		userData.username = userData.fullname;
+	}
+
+	/* strip username from illegal characters */
+	userData.username = userData.username.trim().replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
+
+	if (!userData.username) {
+		winston.warn('[session-sharing] No valid username could be determined');
+		throw new Error('payload-invalid');
+	}
+
+	if (userData.hasOwnProperty('groups') && !Array.isArray(userData.groups)) {
+		winston.warn('[session-sharing] Array expected for `groups` in JWT payload. Ignoring.');
+		delete userData.groups;
+	}
+
+	winston.verbose('[session-sharing] Payload verified');
+	const data = await plugins.hooks.fire('filter:sessionSharing.normalizePayload', {
+		payload: payload,
+		userData: userData,
+	});
+
+	return data.userData;
 };
 
 plugin.verifyUser = async (token, uid, isNewUser) => {
@@ -157,6 +210,7 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
 
 plugin.findOrCreateUser = async (userData) => {
 	const { id } = userData;
+	console.log(userData);
 	let isNewUser = false;
 	let userId = null;
 	let queries = [db.sortedSetScore(plugin.settings.name + ':uid', userData.sid)];
@@ -164,8 +218,10 @@ plugin.findOrCreateUser = async (userData) => {
 	if (userData.email && userData.email.length) {
 		queries = [...queries, db.sortedSetScore('email:uid', userData.email)];
 	}
-
+	console.log(queries);
 	let [uid, mergeUid] = await Promise.all(queries);
+	console.log(uid);
+	console.log(mergeUid);
 	uid = parseInt(uid, 10);
 	mergeUid = parseInt(mergeUid, 10);
 
@@ -174,12 +230,14 @@ plugin.findOrCreateUser = async (userData) => {
 		try {
 			/* check if the user with the given id actually exists */
 			const exists = await user.exists(uid);
+			console.log("kakemddsda");
 
 			if (exists) {
 				userId = uid;
+				console.log("kakemddsda");
 			} else {
 				/* reference is outdated, user got deleted */
-				//await db.sortedSetRemove(plugin.settings.name + ':uid', id);
+				await db.sortedSetRemove(plugin.settings.name + ':uid', id);
 			}
 		} catch (error) {
 			/* ignore errors, but assume the user doesn't exist  */
@@ -190,17 +248,18 @@ plugin.findOrCreateUser = async (userData) => {
 	 if (!userId && mergeUid && !isNaN(mergeUid)) {
 		winston.info('[session-sharing] Found user via their email, associating this id (' + id + ') with their NodeBB account');
 		await db.sortedSetAdd(plugin.settings.name + ':uid', mergeUid, id);
-		//userId = mergeUid;
+		userId = mergeUid;
 	 }
 
 	/* create the user from payload if necessary */
 	winston.debug('createUser?', !userId);
 	if (!userId) {
+		console.log("shdusa");
 		if (plugin.settings.noRegistration === 'on') {
 			throw new Error('no-match');
 		}
 
-		//userId = await plugin.createUser(userData);
+		userId = await plugin.createUser(userData);
 		isNewUser = true;
 	}
 
@@ -297,7 +356,9 @@ async function executeJoinLeave(uid, join, leave) {
 
 plugin.createUser = async (userData) => {
 	winston.verbose('[session-sharing] No user found, creating a new user for this login');
-
+	console.log(userData);
+	console.log("sdjka");
+	console.log(profileFields);
 	const uid = await user.create(_.pick(userData, profileFields));
 	await db.sortedSetAdd(plugin.settings.name + ':uid', uid, userData.id);
 	return uid;
