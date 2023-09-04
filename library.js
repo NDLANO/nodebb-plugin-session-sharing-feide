@@ -15,6 +15,8 @@ const SocketPlugins = require.main.require('./src/socket.io/plugins');
 const db = require.main.require('./src/database');
 const plugins = require.main.require('./src/plugins');
 
+const fetch = require('node-fetch');
+
 const controllers = require('./lib/controllers');
 const nbbAuthController = require.main.require('./src/controllers/authentication');
 const logoutAsync = util.promisify((req, callback) => req.logout(callback));
@@ -40,7 +42,7 @@ const payloadKeys = profileFields.concat([
 ]);
 
 const plugin = {
-	ready: false,
+	ready: true,
 	settings: {
 		name: 'appId',
 		headerName: 'authorization',
@@ -126,12 +128,15 @@ plugin.getUser = async (remoteId) => {
 };
 
 plugin.process = async (token) => {
-	const userData = await this.validateToken(token);
+	winston.verbose('sdjakdjskodnq');
+	winston.verbose(token);
+	const userData = await plugin.validateToken(token);
+	winston.verbose(JSON.stringify(userData));
 	const [uid, isNewUser] = await plugin.findOrCreateUser(userData);
-	await plugin.updateUserProfile(uid, userData, isNewUser);
+	/*await plugin.updateUserProfile(uid, userData, isNewUser);
 	await plugin.updateUserGroups(uid, userData);
 	await plugin.verifyUser(token, uid, isNewUser);
-	return uid;
+	return uid; */
 };
 
 plugin.verifyUser = async (token, uid, isNewUser) => {
@@ -154,8 +159,8 @@ plugin.findOrCreateUser = async (userData) => {
 	const { id } = userData;
 	let isNewUser = false;
 	let userId = null;
-	let queries = [db.sortedSetScore(plugin.settings.name + ':uid', userData.id)];
-
+	let queries = [db.sortedSetScore(plugin.settings.name + ':uid', userData.sid)];
+	console.log(userData.email);
 	if (userData.email && userData.email.length) {
 		queries = [...queries, db.sortedSetScore('email:uid', userData.email)];
 	}
@@ -174,7 +179,7 @@ plugin.findOrCreateUser = async (userData) => {
 				userId = uid;
 			} else {
 				/* reference is outdated, user got deleted */
-				await db.sortedSetRemove(plugin.settings.name + ':uid', id);
+				//await db.sortedSetRemove(plugin.settings.name + ':uid', id);
 			}
 		} catch (error) {
 			/* ignore errors, but assume the user doesn't exist  */
@@ -182,11 +187,11 @@ plugin.findOrCreateUser = async (userData) => {
 		}
 	}
 
-	if (!userId && mergeUid && !isNaN(mergeUid)) {
+	 if (!userId && mergeUid && !isNaN(mergeUid)) {
 		winston.info('[session-sharing] Found user via their email, associating this id (' + id + ') with their NodeBB account');
 		await db.sortedSetAdd(plugin.settings.name + ':uid', mergeUid, id);
-		userId = mergeUid;
-	}
+		//userId = mergeUid;
+	 }
 
 	/* create the user from payload if necessary */
 	winston.debug('createUser?', !userId);
@@ -195,7 +200,7 @@ plugin.findOrCreateUser = async (userData) => {
 			throw new Error('no-match');
 		}
 
-		userId = await plugin.createUser(userData);
+		//userId = await plugin.createUser(userData);
 		isNewUser = true;
 	}
 
@@ -299,7 +304,6 @@ plugin.createUser = async (userData) => {
 };
 
 plugin.addMiddleware = async function ({ req, res }) {
-	console.log(req, res)
 	winston.verbose('[session-sharing] test rebuild');
 	const { hostWhitelist, guestRedirect, editOverride, loginOverride, registerOverride } = await meta.settings.get('session-sharing');
 
@@ -330,8 +334,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 	// Only respond to page loads by guests, not api or asset calls
 	const hasSession = req.hasOwnProperty('user') && req.user.hasOwnProperty('uid') && parseInt(req.user.uid, 10) > 0;
 	const hasLoginLock = req.session.hasOwnProperty('loginLock');
-
-	if (
+	/* if (
 		!plugin.ready ||	// plugin not ready
 		(plugin.settings.behaviour === 'trust' && hasSession) ||	// user logged in + "trust" behaviour
 		((plugin.settings.behaviour === 'revalidate' || plugin.settings.behaviour === 'update') && hasLoginLock) ||
@@ -341,8 +344,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 		delete req.session.loginLock;	// remove login lock for "update" or "revalidate" logins
 
 		return;
-	}
-
+	} */
 	if (editOverride && hasSession && req.originalUrl.match(/\/user\/.*\/edit(\/\w+)?$/)) {
 		return res.redirect(editOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
 	}
@@ -365,10 +367,9 @@ plugin.addMiddleware = async function ({ req, res }) {
 		await plugin.cleanup({ res: res });
 		return handleGuest.call(null, req, res);
 	}
-
-	if (Object.keys(req.headers.authorization).length && req.headers.hasOwnProperty(plugin.headers.authorization) && req.authorization[plugin.settings.authorization].length) {
+	if (Object.keys(req.headers.authorization).length && req.headers.hasOwnProperty(plugin.settings.headerName) && req.headers[plugin.settings.headerName].length) {
 		try {
-			const uid = await plugin.process(req.header.authorization);
+			const uid = await plugin.process(req.headers.authorization);
 			if (uid === req.sub) {
 				winston.verbose(`[session-sharing] Re-validated login for uid ${uid}, path ${req.originalUrl}`);
 				return;
@@ -531,87 +532,28 @@ plugin.saveReverseToken = async ({ req, userData: data }) => {
 	winston.info(`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`);
 };
 
-plugin.validateToken = async ({token}) => {
+plugin.validateToken = async (token) => {
 	const url = 'https://auth.dataporten.no/openid/userinfo';
-
+	winston.verbose(token);
 	try {
 		const response = await fetch(url, {
-		headers: {
-			Authorization: token
-		}
+			headers: {
+				Authorization: `Bearer ${token}`,
+			},
 		});
 
 		if (response.ok) {
 			const userInfo = await response.json();
 			// Perform any additional validation checks on the userInfo object if needed
 			winston.info('ID is valid:', userInfo);
-			return userInfo
-		} else {
-			winston.warn('[session-sharing] ID is invalid');
-		}
+			return userInfo;
+		} 
+		winston.warn('[session-sharing] ID is invalid');
+		
 	} catch (error) {
 		winston.warn('[session-sharing] An error occurred'), error;
 		throw new Error('An error occurred while validating ID');
-	} 
-}
-
-
-plugin.receiveID = function(req, res) {
-	var hasSession = req.hasOwnProperty('user') && req.user.hasOwnProperty('sub') && parseInt(req.user.uid, 10) > 0;
-	var hasAuthorization = req.headers.authorization?.length > 0;
-  	var isBlacklisted = meta.blacklist.test(req.ip);
-
-	if (isBlacklisted) {
-		if (hasSession) {
-			req.logout();
-			res.locals.fullRefresh = true;
-		}
 	}
-
-	if (hasAuthorization) {
-		return plugin.process(req.header.authorization, function(err, uid) {
-			if (err) {
-				switch(err.message) {
-					case 'banned':
-						winston.info('[session-sharing] uid ' + uid + ' is banned, not logging them in');
-						break;
-					case 'payload-invalid':
-						winston.warn('[session-sharing] The passed-in payload was invalid and could not be processed');
-						break;
-					default:
-						winston.warn('[session-sharing] Error encountered while parsing authentication token: ' + err.message);
-						break;
-				}
-
-				return res.sendStatus(500);
-			}
-
-			winston.info('[session-sharing] Processing login for uid ' + uid);
-			req.uid = uid;
-			nbbAuthController.doLogin(req, uid, function(err) {
-				if (err) {
-					return res.sendStatus(403);
-				}
-
-				if (!req.session.returnTo) {
-					res.redirect(302, nconf.get('relative_path') + '/');
-			  } else {
-					var next = req.session.returnTo;
-					delete req.session.returnTo;
-					res.redirect(302, next);
-				}
-			});
-		});
-	} else if (hasSession) {
-		// Has login session but no cookie, logout
-		req.logout();
-		res.locals.fullRefresh = true;
-		handleGuest.apply(null, arguments);
-	} else {
-		handleGuest.apply(null, arguments);
-	}
-
-	res.sendStatus(200);
 };
 
 module.exports = plugin;
