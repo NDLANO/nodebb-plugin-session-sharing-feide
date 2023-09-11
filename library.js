@@ -572,15 +572,18 @@ plugin.validateToken = async (token) => {
 	try {
 		const response = await fetch(url, {
 			headers: {
-				Authorization: `Bearer ${token}`,
+				Authorization: token,
 			},
 		});
 
 		if (response.ok) {
 			const userInfo = await response.json();
 			// Perform any additional validation checks on the userInfo object if needed
-			winston.info('ID is valid:', userInfo);
-			return userInfo;
+			if(plugin.validateMemberStatus(token)){
+				winston.info('ID is valid:', userInfo);
+				return userInfo;
+			};
+			return;
 		}
 		winston.warn('[session-sharing] ID is invalid');
 	} catch (error) {
@@ -588,5 +591,31 @@ plugin.validateToken = async (token) => {
 		throw new Error('An error occurred while validating ID');
 	}
 };
+
+plugin.validateMemberStatus = async (token) => {
+	const url = 'https://api.dataporten.no/userinfo/v1/userinfo';
+	try {
+		const response = await fetch(url, {
+			headers: {
+				Authorization: token,
+			},
+		});
+
+		if (response.ok) {
+			const userInfo = await response.json();
+			// Perform any additional validation checks on the userInfo object if needed
+			if (userInfo.eduPersonAffiliation.includes('employee')){
+				winston.info('ID is valid for teacher:', userInfo);
+				return true;
+			}
+			winston.warn('[session-sharing] ID is invalid for role');
+			return false;
+		}
+		winston.warn('[session-sharing] ID is invalid');
+	} catch (error) {
+		winston.warn('[session-sharing] An error occurred', error);
+		throw new Error('An error occurred while validating ID');
+	}
+}
 
 module.exports = plugin;
