@@ -204,22 +204,23 @@ plugin.findOrCreateUser = async (userData) => {
 	const { id } = userData;
 	let isNewUser = false;
 	let userId = null;
-	let queries = [db.sortedSetScore(plugin.settings.name + ':uid', userData.sid)];
+	let queries = [db.getSortedSetMembers(plugin.settings.name + ':feideid', userData.sub)];
 	if (userData.email && userData.email.length) {
 		queries = [...queries, db.sortedSetScore('email:uid', userData.email)];
 	}
-	let [uid, mergeUid] = await Promise.all(queries);
+	let [feideid, mergeUid] = await Promise.all(queries);
+	let uid = await db.sortedSetScore(plugin.settings.name + ':feideid', feideid);
 	uid = parseInt(uid, 10);
 	mergeUid = parseInt(mergeUid, 10);
 
 	/* check if found something to work with */
-	if (uid && !isNaN(uid)) {
+	if (feideid) {
 		try {
 			/* check if the user with the given id actually exists */
 			const exists = await user.exists(uid);
 
 			if (exists) {
-				userId = uid;
+				userId = feideid;
 			} else {
 				/* reference is outdated, user got deleted */
 				await db.sortedSetRemove(plugin.settings.name + ':uid', id);
@@ -340,7 +341,7 @@ async function executeJoinLeave(uid, join, leave) {
 plugin.createUser = async (userData) => {
 	winston.verbose('[session-sharing] No user found, creating a new user for this login');
 	const uid = await user.create(_.pick(userData, profileFields));
-	await db.sortedSetAdd(plugin.settings.name + ':uid', uid, userData.id);
+	await db.sortedSetAdd(plugin.settings.name + ':feideId', uid, userData.sub);
 	return uid;
 };
 
