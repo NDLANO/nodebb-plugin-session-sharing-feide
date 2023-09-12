@@ -188,7 +188,7 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
 	await plugins.hooks.fire('static:sessionSharing.verifyUser', {
 		uid: uid,
 		isNewUser: isNewUser,
-		token: token,
+		token: token.replace("Bearer",""),
 	});
 
 	// Check ban state of user
@@ -220,7 +220,7 @@ plugin.findOrCreateUser = async (userData) => {
 			const exists = await user.exists(uid);
 
 			if (exists) {
-				userId = feideid;
+				userId = uid;
 			} else {
 				/* reference is outdated, user got deleted */
 				await db.sortedSetRemove(plugin.settings.name + ':uid', id);
@@ -576,11 +576,10 @@ plugin.validateToken = async (token) => {
 				Authorization: token,
 			},
 		});
-
 		if (response.ok) {
 			const userInfo = await response.json();
 			// Perform any additional validation checks on the userInfo object if needed
-			if(plugin.validateMemberStatus(token)){
+			if(await plugin.validateMemberStatus(token)){
 				winston.info('ID is valid:', userInfo);
 				return userInfo;
 			};
@@ -601,7 +600,6 @@ plugin.validateMemberStatus = async (token) => {
 				Authorization: token,
 			},
 		});
-
 		if (response.ok) {
 			const userInfo = await response.json();
 			// Perform any additional validation checks on the userInfo object if needed
