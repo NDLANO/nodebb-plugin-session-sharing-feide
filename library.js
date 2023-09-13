@@ -438,10 +438,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 	if (Object.keys(req.headers.feideauthorization).length && req.headers.hasOwnProperty(plugin.settings.headerName) && req.headers[plugin.settings.headerName].length) {
 		try {
 			const uid = await plugin.process(req.headers.feideauthorization, res);
-			if (uid === req.sub) { // DONT THINK THIS IS NEEDED
-				winston.verbose(`[feide-authentication] Re-validated login for uid ${uid}, path ${req.originalUrl}`);
-				return;
-			}
+			if(!uid) return;
 			winston.verbose('[feide-authentication] Processing login for uid ' + uid + ', path ' + req.originalUrl);
 			await nbbAuthController.doLogin(req, uid);
 			req.session.loginLock = true;
@@ -576,7 +573,7 @@ plugin.appendTemplate = async (data) => {
 	return data;
 };
 
-plugin.saveReverseToken = async ({ req, userData: data }) => {
+/* plugin.saveReverseToken = async ({ req, userData: data }) => {
 	if (!plugin.ready || !data || plugin.settings.reverseToken !== 'on') {
 		return;	// no reverse token if secret not set
 	}
@@ -594,7 +591,7 @@ plugin.saveReverseToken = async ({ req, userData: data }) => {
 
 	winston.info(`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`);
 };
-
+ */
 const fetchUserInfo = async (url, token) => {
 	try {
 	  const response = await fetch(url, {
