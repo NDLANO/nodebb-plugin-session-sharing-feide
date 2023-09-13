@@ -21,6 +21,10 @@ const controllers = require('./lib/controllers');
 const nbbAuthController = require.main.require('./src/controllers/authentication');
 const logoutAsync = util.promisify((req, callback) => req.logout(callback));
 
+const userInfoUrl = 'https://auth.dataporten.no/openid/userinfo';
+const memberStatusUrl = 'https://api.dataporten.no/userinfo/v1/userinfo';
+const validRoles = ['employee'];
+
 /* all the user profile fields that can be passed to user.updateProfile */
 const profileFields = [
 	'username',
@@ -122,14 +126,37 @@ plugin.getUser = async (remoteId) => {
 	return user.getUserFields(uid, ['username', 'userslug', 'picture']);
 };
 
-plugin.process = async (token) => {
-	const userData = await plugin.validateToken(token);
-	const normalizedUserData = await plugin.normalizePayload(userData);
-	const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
-	await plugin.updateUserProfile(uid, userData, isNewUser);
-	await plugin.updateUserGroups(uid, userData);
-	await plugin.verifyUser(token, uid, isNewUser);
-	return uid;
+plugin.process = async (token, response) => {
+	try{
+		const userData = await validateToken(token, userInfoUrl)
+		.then(userInfo => {
+			if (userInfo) {
+				return validateMemberStatus(token, memberStatusUrl, validRoles)
+					.then(isValidMember => {
+						console.log('Is valid member:', isValidMember);
+						if(isValidMember) {
+							return userInfo;
+						}
+						response.status(403).send('Forbidden');
+					});
+			}
+			return;
+		})
+		.catch(error => {
+			console.error('An error occurred:', error);
+		});
+		if(userData) {
+			const normalizedUserData = await plugin.normalizePayload(userData);
+			const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
+			await plugin.updateUserProfile(uid, userData, isNewUser);
+			await plugin.updateUserGroups(uid, userData);
+			await plugin.verifyUser(token, uid, isNewUser);
+			return uid;
+		}
+	} catch (error){
+		winston.error("Something went wrong", error);
+		response.status(500).send('Internal Server Error');
+	}
 };
 
 plugin.normalizePayload = async (payload) => {
@@ -410,7 +437,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 	} */
 	if (Object.keys(req.headers.feideauthorization).length && req.headers.hasOwnProperty(plugin.settings.headerName) && req.headers[plugin.settings.headerName].length) {
 		try {
-			const uid = await plugin.process(req.headers.feideauthorization);
+			const uid = await plugin.process(req.headers.feideauthorization, res);
 			if (uid === req.sub) { // DONT THINK THIS IS NEEDED
 				winston.verbose(`[session-sharing] Re-validated login for uid ${uid}, path ${req.originalUrl}`);
 				return;
@@ -568,53 +595,42 @@ plugin.saveReverseToken = async ({ req, userData: data }) => {
 	winston.info(`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`);
 };
 
-plugin.validateToken = async (token) => {
-	const url = 'https://auth.dataporten.no/openid/userinfo';
+const fetchUserInfo = async (url, token) => {
 	try {
-		const response = await fetch(url, {
-			headers: {
-				Authorization: token,
-			},
-		});
-		if (response.ok) {
-			const userInfo = await response.json();
-			// Perform any additional validation checks on the userInfo object if needed
-			if(await plugin.validateMemberStatus(token)){
-				winston.info('ID is valid:', userInfo);
-				return userInfo;
-			};
-			return;
-		}
-		winston.warn('[session-sharing] ID is invalid');
+	  const response = await fetch(url, {
+		headers: {
+		  Authorization: token,
+		},
+	  });
+	  if (response.ok) {
+		return await response.json();
+	  }
+	  winston.warn('[session-sharing] ID is invalid');
+	  return null;
 	} catch (error) {
-		winston.warn('[session-sharing] An error occurred', error);
-		throw new Error('An error occurred while validating ID');
+	  winston.warn('[session-sharing] An error occurred', error);
+	  throwError('An error occurred while validating ID');
 	}
+  };
+  
+const validateToken = async (token, userInfoUrl) => {
+	const userInfo = await fetchUserInfo(userInfoUrl, token);
+	if (userInfo) {
+		winston.info('ID is valid:', userInfo);
+		console.log(userInfo);
+		return userInfo;
+	}
+	return null;
 };
 
-plugin.validateMemberStatus = async (token) => {
-	const url = 'https://api.dataporten.no/userinfo/v1/userinfo';
-	try {
-		const response = await fetch(url, {
-			headers: {
-				Authorization: token,
-			},
-		});
-		if (response.ok) {
-			const userInfo = await response.json();
-			// Perform any additional validation checks on the userInfo object if needed
-			if (userInfo.eduPersonAffiliation.includes('employee')){
-				winston.info('ID is valid for teacher:', userInfo);
-				return true;
-			}
-			winston.warn('[session-sharing] ID is invalid for role');
-			return false;
-		}
-		winston.warn('[session-sharing] ID is invalid');
-	} catch (error) {
-		winston.warn('[session-sharing] An error occurred', error);
-		throw new Error('An error occurred while validating ID');
+const validateMemberStatus = async (token, memberStatusUrl, validRoles) => {
+	const userInfo = await fetchUserInfo(memberStatusUrl, token);
+	if (userInfo && validRoles.some(role => userInfo.eduPersonAffiliation.includes(role))) {
+		winston.info('ID is valid for role:', userInfo);
+		return true;
 	}
-}
+	winston.warn('[session-sharing] ID is invalid for role');
+	return false;
+};
 
 module.exports = plugin;
