@@ -126,14 +126,13 @@ plugin.getUser = async (remoteId) => {
 	return user.getUserFields(uid, ['username', 'userslug', 'picture']);
 };
 
-plugin.process = async (token, response) => {
+plugin.process = async (token, request, response) => {
 	try{
 		const userData = await validateToken(token, userInfoUrl)
 		.then(userInfo => {
 			if (userInfo) {
 				return validateMemberStatus(token, memberStatusUrl, validRoles)
 					.then(isValidMember => {
-						console.log('Is valid member:', isValidMember);
 						if(isValidMember) {
 							return userInfo;
 						}
@@ -147,7 +146,7 @@ plugin.process = async (token, response) => {
 		});
 		if(userData) {
 			const normalizedUserData = await plugin.normalizePayload(userData);
-			const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
+			const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData, request);
 			await plugin.updateUserProfile(uid, userData, isNewUser);
 			await plugin.updateUserGroups(uid, userData);
 			await plugin.verifyUser(token, uid, isNewUser);
@@ -227,25 +226,23 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
 	}
 };
 
-plugin.findOrCreateUser = async (userData) => {
+plugin.findOrCreateUser = async (userData, req) => {
 	const { id } = userData;
 	let isNewUser = false;
 	let userId = null;
-	let queries = [db.getSortedSetMembers(plugin.settings.name + ':feideid', userData.sub)];
+	let queries = [db.getSortedSetMembers(plugin.settings.name + ':feideId', userData.sub)];
 	if (userData.email && userData.email.length) {
 		queries = [...queries, db.sortedSetScore('email:uid', userData.email)];
 	}
-	let [feideid, mergeUid] = await Promise.all(queries);
-	let uid = await db.sortedSetScore(plugin.settings.name + ':feideid', feideid);
+	let [feideId, mergeUid] = await Promise.all(queries);
+	let uid = await db.sortedSetScore(plugin.settings.name + ':feideId', feideId);
 	uid = parseInt(uid, 10);
 	mergeUid = parseInt(mergeUid, 10);
-
 	/* check if found something to work with */
-	if (feideid) {
+	if (feideId) {
 		try {
 			/* check if the user with the given id actually exists */
 			const exists = await user.exists(uid);
-
 			if (exists) {
 				userId = uid;
 			} else {
@@ -263,10 +260,9 @@ plugin.findOrCreateUser = async (userData) => {
 		await db.sortedSetAdd(plugin.settings.name + ':uid', mergeUid, id);
 		userId = mergeUid;
 	}
-
 	/* create the user from payload if necessary */
 	winston.debug('createUser?', !userId);
-	if (!userId) {
+	if (!userId && req.method == "POST") {
 		if (plugin.settings.noRegistration === 'on') {
 			throw new Error('no-match');
 		}
@@ -437,7 +433,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 	} */
 	if (Object.keys(req.headers.feideauthorization).length && req.headers.hasOwnProperty(plugin.settings.headerName) && req.headers[plugin.settings.headerName].length) {
 		try {
-			const uid = await plugin.process(req.headers.feideauthorization, res);
+			const uid = await plugin.process(req.headers.feideauthorization, req, res);
 			if(!uid) return;
 			winston.verbose('[feide-authentication] Processing login for uid ' + uid + ', path ' + req.originalUrl);
 			await nbbAuthController.doLogin(req, uid);
@@ -614,7 +610,6 @@ const validateToken = async (token, userInfoUrl) => {
 	const userInfo = await fetchUserInfo(userInfoUrl, token);
 	if (userInfo) {
 		winston.info('ID is valid:', userInfo);
-		console.log(userInfo);
 		return userInfo;
 	}
 	return null;
