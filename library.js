@@ -6,7 +6,6 @@ const nconf = module.parent.require('nconf');
 const util = require('util');
 
 const _ = require('lodash');
-const jwt = require('jsonwebtoken');
 
 const meta = require.main.require('./src/meta');
 const user = require.main.require('./src/user');
@@ -139,7 +138,7 @@ plugin.process = async (token, request, response) => {
 						response.status(403).send('Forbidden');
 					});
 			}
-			return;
+			response.status(403).send('Forbidden');
 		})
 		.catch(error => {
 			console.error('An error occurred:', error);
@@ -231,13 +230,9 @@ plugin.findOrCreateUser = async (userData, req) => {
 	let isNewUser = false;
 	let userId = null;
 	let queries = [db.getSortedSetMembers(plugin.settings.name + ':feideId', userData.sub)];
-	if (userData.email && userData.email.length) {
-		queries = [...queries, db.sortedSetScore('email:uid', userData.email)];
-	}
-	let [feideId, mergeUid] = await Promise.all(queries);
+	let feideId = await Promise.all(queries);
 	let uid = await db.sortedSetScore(plugin.settings.name + ':feideId', feideId);
 	uid = parseInt(uid, 10);
-	mergeUid = parseInt(mergeUid, 10);
 	/* check if found something to work with */
 	if (feideId) {
 		try {
@@ -255,11 +250,6 @@ plugin.findOrCreateUser = async (userData, req) => {
 		}
 	}
 
-	if (!userId && mergeUid && !isNaN(mergeUid)) {
-		winston.info('[feide-authentication] Found user via their email, associating this id (' + id + ') with their NodeBB account');
-		await db.sortedSetAdd(plugin.settings.name + ':uid', mergeUid, id);
-		userId = mergeUid;
-	}
 	/* create the user from payload if necessary */
 	winston.debug('createUser?', !userId);
 	if (!userId && req.method == "POST") {
@@ -400,37 +390,6 @@ plugin.addMiddleware = async function ({ req, res }) {
 	}
 	// Only respond to page loads by guests, not api or asset calls
 	const hasSession = req.hasOwnProperty('user') && req.user.hasOwnProperty('uid') && parseInt(req.user.uid, 10) > 0;
-	//const hasLoginLock = req.session.hasOwnProperty('loginLock');
-	/* if (
-		!plugin.ready ||	// plugin not ready
-		(plugin.settings.behaviour === 'trust') ||	// user logged in + "trust" behaviour
-		((plugin.settings.behaviour === 'revalidate' || plugin.settings.behaviour === 'update'))
-	) {
-		// Let requests through under "update" or "revalidate" behaviour only if they're logging in for the first time
-		delete req.session.loginLock;	// remove login lock for "update" or "revalidate" logins
-
-		return;
-	} */
-	if (editOverride && hasSession && req.originalUrl.match(/\/user\/.*\/edit(\/\w+)?$/)) {
-		return res.redirect(editOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
-	}
-	if (loginOverride && req.originalUrl.match(/\/login$/)) {
-		return res.redirect(loginOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
-	}
-	if (registerOverride && req.originalUrl.match(/\/register$/)) {
-		return res.redirect(registerOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
-	}
-	// Hook into ip blacklist functionality in core
-	/* try {
-		await meta.blacklist.test(req.ip);
-	} catch (error) {
-		/* if (hasSession) {
-			await logoutAsync(req);
-			res.locals.fullRefresh = true;
-		}
-		await plugin.cleanup({ res: res });
-		return handleGuest.call(null, req, res);
-	} */
 	if (Object.keys(req.headers.feideauthorization).length && req.headers.hasOwnProperty(plugin.settings.headerName) && req.headers[plugin.settings.headerName].length) {
 		try {
 			const uid = await plugin.process(req.headers.feideauthorization, req, res);
@@ -440,7 +399,6 @@ plugin.addMiddleware = async function ({ req, res }) {
 			req.session.loginLock = true;
 			delete req.session.returnTo;
 		} catch (error) {
-			let handleAsGuest = false;
 
 			switch (error.message) {
 			case 'payload-invalid':
@@ -448,7 +406,6 @@ plugin.addMiddleware = async function ({ req, res }) {
 				break;
 			case 'no-match':
 				winston.info('[feide-authentication] Payload valid, but local account not found.  Assuming guest.');
-				handleAsGuest = true;
 				break;
 			default:
 				winston.warn('[feide-authentication] Error encountered while parsing token: ' + error.message);
@@ -458,12 +415,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 				error,
 				res: res,
 				settings: plugin.settings,
-				handleAsGuest: handleAsGuest,
 			});
-
-			if (data.handleAsGuest) {
-				return handleGuest.call(error, req, res);
-			}
 
 			throw error;
 		}
@@ -480,42 +432,6 @@ plugin.addMiddleware = async function ({ req, res }) {
 	} else {
 		return handleGuest.call(null, req, res);
 	}
-};
-
-plugin.generate = function (req, res) {
-	if (!plugin.ready) {
-		return res.sendStatus(404);
-	}
-
-	let payload = {};
-	payload[plugin.settings['payload:id']] = 1;
-	payload[plugin.settings['payload:username']] = 'testUser';
-	payload[plugin.settings['payload:email']] = 'testUser@example.org';
-	payload[plugin.settings['payload:firstName']] = 'Test';
-	payload[plugin.settings['payload:lastName']] = 'User';
-	payload[plugin.settings['payload:location']] = 'Testlocation';
-	payload[plugin.settings['payload:birthday']] = '04/01/1981';
-	payload[plugin.settings['payload:website']] = 'nodebb.org';
-	payload[plugin.settings['payload:aboutme']] = 'I am just testing';
-	payload[plugin.settings['payload:signature']] = 'T User';
-	payload[plugin.settings['payload:groupTitle']] = 'TestUsers';
-	payload[plugin.settings['payload:groups']] = ['test-group'];
-
-	if (plugin.settings.payloadParent || plugin.settings['payload:parent']) {
-		const parentKey = plugin.settings.payloadParent || plugin.settings['payload:parent'];
-		const newPayload = {};
-		newPayload[parentKey] = payload;
-		payload = newPayload;
-	}
-
-	const token = jwt.sign(payload, plugin.settings.secret);
-	res.cookie(plugin.settings.headerName, token, {
-		maxAge: 1000 * 60 * 60 * 24 * 21,
-		httpOnly: true,
-		domain: plugin.settings.cookieDomain,
-	});
-
-	res.sendStatus(200);
 };
 
 plugin.addAdminNavigation = async (header) => {
@@ -569,25 +485,6 @@ plugin.appendTemplate = async (data) => {
 	return data;
 };
 
-/* plugin.saveReverseToken = async ({ req, userData: data }) => {
-	if (!plugin.ready || !data || plugin.settings.reverseToken !== 'on') {
-		return;	// no reverse token if secret not set
-	}
-
-	const res = req.res;
-	const userData = await user.getUserFields(data.uid, ['sub', 'username', 'picture', 'reputation', 'postcount', 'banned']);
-	userData.groups = (await groups.getUserGroups([data.uid])).pop();
-	const token = jwt.sign(userData, plugin.settings.secret);
-
-	res.cookie('nbb_token', token, {
-		maxAge: meta.getSessionTTLSeconds() * 1000,
-		httpOnly: true,
-		domain: plugin.settings.cookieDomain,
-	});
-
-	winston.info(`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`);
-};
- */
 const fetchUserInfo = async (url, token) => {
 	try {
 	  const response = await fetch(url, {
