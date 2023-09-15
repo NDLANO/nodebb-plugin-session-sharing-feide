@@ -359,7 +359,7 @@ plugin.createUser = async (userData) => {
 };
 
 plugin.addMiddleware = async function ({ req, res }) {
-	if (!req.headers.feideauthorization) {
+	if (!req.headers[plugin.settings.headerName]) {
 		return;
 	}
 	winston.verbose('[feide-authentication] test rebuild');
@@ -388,11 +388,10 @@ plugin.addMiddleware = async function ({ req, res }) {
 			res.redirect(nconf.get('relative_path') + req.url);
 		}
 	}
-	// Only respond to page loads by guests, not api or asset calls
-	const hasSession = req.hasOwnProperty('user') && req.user.hasOwnProperty('uid') && parseInt(req.user.uid, 10) > 0;
-	if (Object.keys(req.headers.feideauthorization).length && req.headers.hasOwnProperty(plugin.settings.headerName) && req.headers[plugin.settings.headerName].length) {
+	
+	if (Object.keys(req.headers[plugin.settings.headerName]).length) {
 		try {
-			const uid = await plugin.process(req.headers.feideauthorization, req, res);
+			const uid = await plugin.process(req.headers[plugin.settings.headerName], req, res);
 			if(!uid) return;
 			winston.verbose('[feide-authentication] Processing login for uid ' + uid + ', path ' + req.originalUrl);
 			await nbbAuthController.doLogin(req, uid);
@@ -418,16 +417,6 @@ plugin.addMiddleware = async function ({ req, res }) {
 			});
 
 			throw error;
-		}
-	} else if (hasSession) {
-		// Has login session but no cookie, can assume "revalidate" behaviour
-		const isAdmin = await user.isAdministrator(req.user.uid);
-
-		if (plugin.settings.behaviour !== 'update' && (plugin.settings.adminRevalidate === 'on' || !isAdmin)) {
-			winston.verbose(`[feide-authentication] Found login session but no cookie, logging out user (was uid ${req.uid})`);
-			await logoutAsync(req);
-			res.locals.fullRefresh = true;
-			return handleGuest(req, res);
 		}
 	} else {
 		return handleGuest.call(null, req, res);
