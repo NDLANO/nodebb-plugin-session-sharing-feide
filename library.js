@@ -6,7 +6,6 @@ const nconf = module.parent.require('nconf');
 const util = require('util');
 
 const _ = require('lodash');
-const jwt = require('jsonwebtoken');
 
 const meta = require.main.require('./src/meta');
 const user = require.main.require('./src/user');
@@ -15,9 +14,15 @@ const SocketPlugins = require.main.require('./src/socket.io/plugins');
 const db = require.main.require('./src/database');
 const plugins = require.main.require('./src/plugins');
 
+const fetch = require('node-fetch');
+
 const controllers = require('./lib/controllers');
 const nbbAuthController = require.main.require('./src/controllers/authentication');
 const logoutAsync = util.promisify((req, callback) => req.logout(callback));
+
+const userInfoUrl = 'https://auth.dataporten.no/openid/userinfo';
+const memberStatusUrl = 'https://api.dataporten.no/userinfo/v1/userinfo';
+const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
 const profileFields = [
@@ -32,18 +37,17 @@ const profileFields = [
 	'aboutme',
 ];
 const payloadKeys = profileFields.concat([
-	'id', // the uniq identifier of that account
-	'firstName', // for backwards compatibillity
-	'lastName', // dto.
+	'sub', // the uniq identifier of that account
 	'picture',
 	'groups',
+	'name',
 ]);
 
 const plugin = {
 	ready: false,
 	settings: {
 		name: 'appId',
-		cookieName: 'token',
+		headerName: 'feideauthorization',
 		cookieDomain: undefined,
 		secret: '',
 		behaviour: 'trust',
@@ -67,10 +71,6 @@ plugin.init = async (params) => {
 
 	router.get('/api/session-sharing/lookup', controllers.retrieveUser);
 	router.post('/api/session-sharing/user', controllers.process);
-
-	if (process.env.NODE_ENV === 'development') {
-		router.get('/debug/session', plugin.generate);
-	}
 
 	await plugin.reloadSettings();
 };
@@ -125,14 +125,36 @@ plugin.getUser = async (remoteId) => {
 	return user.getUserFields(uid, ['username', 'userslug', 'picture']);
 };
 
-plugin.process = async (token) => {
-	const payload = await jwt.verify(token, plugin.settings.secret);
-	const userData = await plugin.normalizePayload(payload);
-	const [uid, isNewUser] = await plugin.findOrCreateUser(userData);
-	await plugin.updateUserProfile(uid, userData, isNewUser);
-	await plugin.updateUserGroups(uid, userData);
-	await plugin.verifyUser(token, uid, isNewUser);
-	return uid;
+plugin.process = async (token, request, response) => {
+	try{
+		const userData = await validateToken(token, userInfoUrl)
+		.then(userInfo => {
+			if (userInfo) {
+				return validateMemberStatus(token, memberStatusUrl, validRoles)
+					.then(isValidMember => {
+						if(isValidMember) {
+							return userInfo;
+						}
+						response.status(403).send('Forbidden');
+					});
+			}
+			response.status(403).send('Forbidden');
+		})
+		.catch(error => {
+			console.error('An error occurred:', error);
+		});
+		if(userData) {
+			const normalizedUserData = await plugin.normalizePayload(userData);
+			const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData, request);
+			await plugin.updateUserProfile(uid, userData, isNewUser);
+			await plugin.updateUserGroups(uid, userData);
+			await plugin.verifyUser(token, uid, isNewUser);
+			return uid;
+		}
+	} catch (error){
+		winston.error("Something went wrong", error);
+		response.status(500).send('Internal Server Error');
+	}
 };
 
 plugin.normalizePayload = async (payload) => {
@@ -143,7 +165,7 @@ plugin.normalizePayload = async (payload) => {
 	}
 
 	if (typeof payload !== 'object') {
-		winston.warn('[session-sharing] the payload is not an object', payload);
+		winston.warn('[feide-authentication] the payload is not an object', payload);
 		throw new Error('payload-invalid');
 	}
 
@@ -154,12 +176,12 @@ plugin.normalizePayload = async (payload) => {
 		}
 	});
 
-	if (!userData.id) {
-		winston.warn('[session-sharing] No user id was given in payload');
+	if (!userData.sub) {
+		winston.warn('[feide-authentication] No user id was given in payload');
 		throw new Error('payload-invalid');
 	}
 
-	userData.fullname = (userData.fullname || [userData.firstName, userData.lastName].join(' ')).trim();
+	userData.fullname = (userData.fullname || userData.name || [userData.firstName, userData.lastName].join(' ')).trim();
 
 	if (!userData.username) {
 		userData.username = userData.fullname;
@@ -169,16 +191,16 @@ plugin.normalizePayload = async (payload) => {
 	userData.username = userData.username.trim().replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
 
 	if (!userData.username) {
-		winston.warn('[session-sharing] No valid username could be determined');
+		winston.warn('[feide-authentication] No valid username could be determined');
 		throw new Error('payload-invalid');
 	}
 
 	if (userData.hasOwnProperty('groups') && !Array.isArray(userData.groups)) {
-		winston.warn('[session-sharing] Array expected for `groups` in JWT payload. Ignoring.');
+		winston.warn('[feide-authentication] Array expected for `groups` in JWT payload. Ignoring.');
 		delete userData.groups;
 	}
 
-	winston.verbose('[session-sharing] Payload verified');
+	winston.verbose('[feide-authentication] Payload verified');
 	const data = await plugins.hooks.fire('filter:sessionSharing.normalizePayload', {
 		payload: payload,
 		userData: userData,
@@ -191,7 +213,7 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
 	await plugins.hooks.fire('static:sessionSharing.verifyUser', {
 		uid: uid,
 		isNewUser: isNewUser,
-		token: token,
+		token: token.replace("Bearer",""),
 	});
 
 	// Check ban state of user
@@ -203,26 +225,19 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
 	}
 };
 
-plugin.findOrCreateUser = async (userData) => {
+plugin.findOrCreateUser = async (userData, req) => {
 	const { id } = userData;
 	let isNewUser = false;
 	let userId = null;
-	let queries = [db.sortedSetScore(plugin.settings.name + ':uid', userData.id)];
-
-	if (userData.email && userData.email.length) {
-		queries = [...queries, db.sortedSetScore('email:uid', userData.email)];
-	}
-
-	let [uid, mergeUid] = await Promise.all(queries);
+	let queries = [db.getSortedSetMembers(plugin.settings.name + ':feideId', userData.sub)];
+	let feideId = await Promise.all(queries);
+	let uid = await db.sortedSetScore(plugin.settings.name + ':feideId', feideId);
 	uid = parseInt(uid, 10);
-	mergeUid = parseInt(mergeUid, 10);
-
 	/* check if found something to work with */
-	if (uid && !isNaN(uid)) {
+	if (feideId) {
 		try {
 			/* check if the user with the given id actually exists */
 			const exists = await user.exists(uid);
-
 			if (exists) {
 				userId = uid;
 			} else {
@@ -231,23 +246,16 @@ plugin.findOrCreateUser = async (userData) => {
 			}
 		} catch (error) {
 			/* ignore errors, but assume the user doesn't exist  */
-			winston.warn('[session-sharing] Error while testing user existance', error);
+			winston.warn('[feide-authentication] Error while testing user existance', error);
 		}
-	}
-
-	if (!userId && mergeUid && !isNaN(mergeUid)) {
-		winston.info('[session-sharing] Found user via their email, associating this id (' + id + ') with their NodeBB account');
-		await db.sortedSetAdd(plugin.settings.name + ':uid', mergeUid, id);
-		userId = mergeUid;
 	}
 
 	/* create the user from payload if necessary */
 	winston.debug('createUser?', !userId);
-	if (!userId) {
+	if (!userId && req.method == "POST") {
 		if (plugin.settings.noRegistration === 'on') {
 			throw new Error('no-match');
 		}
-
 		userId = await plugin.createUser(userData);
 		isNewUser = true;
 	}
@@ -274,7 +282,7 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
 	}, {});
 
 	if (Object.keys(obj).length) {
-		winston.debug('[session-sharing] Updating profile fields:', obj);
+		winston.debug('[feide-authentication] Updating profile fields:', obj);
 		obj.uid = uid;
 		try {
 			userObj = await user.updateProfile(uid, obj);
@@ -284,7 +292,7 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
 				userObj = existingFields;
 			}
 		} catch (error) {
-			winston.warn('[session-sharing] Unable to update profile information for uid: ' + uid + '(' + error.message + ')');
+			winston.warn('[feide-authentication] Unable to update profile information for uid: ' + uid + '(' + error.message + ')');
 		}
 	}
 
@@ -344,14 +352,17 @@ async function executeJoinLeave(uid, join, leave) {
 }
 
 plugin.createUser = async (userData) => {
-	winston.verbose('[session-sharing] No user found, creating a new user for this login');
-
+	winston.verbose('[feide-authentication] No user found, creating a new user for this login');
 	const uid = await user.create(_.pick(userData, profileFields));
-	await db.sortedSetAdd(plugin.settings.name + ':uid', uid, userData.id);
+	await db.sortedSetAdd(plugin.settings.name + ':feideId', uid, userData.sub);
 	return uid;
 };
 
 plugin.addMiddleware = async function ({ req, res }) {
+	if (!req.headers[plugin.settings.headerName]) {
+		return;
+	}
+	winston.verbose('[feide-authentication] test rebuild');
 	const { hostWhitelist, guestRedirect, editOverride, loginOverride, registerOverride } = await meta.settings.get('session-sharing');
 
 	if (hostWhitelist) {
@@ -377,158 +388,39 @@ plugin.addMiddleware = async function ({ req, res }) {
 			res.redirect(nconf.get('relative_path') + req.url);
 		}
 	}
-
-	// Only respond to page loads by guests, not api or asset calls
-	const hasSession = req.hasOwnProperty('user') && req.user.hasOwnProperty('uid') && parseInt(req.user.uid, 10) > 0;
-	const hasLoginLock = req.session.hasOwnProperty('loginLock');
-
-	if (
-		!plugin.ready ||	// plugin not ready
-		(plugin.settings.behaviour === 'trust' && hasSession) ||	// user logged in + "trust" behaviour
-		((plugin.settings.behaviour === 'revalidate' || plugin.settings.behaviour === 'update') && hasLoginLock) ||
-		req.originalUrl.startsWith(nconf.get('relative_path') + '/api')	// api routes
-	) {
-		// Let requests through under "update" or "revalidate" behaviour only if they're logging in for the first time
-		delete req.session.loginLock;	// remove login lock for "update" or "revalidate" logins
-
-		return;
-	}
-
-	if (editOverride && hasSession && req.originalUrl.match(/\/user\/.*\/edit(\/\w+)?$/)) {
-		return res.redirect(editOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
-	}
-	if (loginOverride && req.originalUrl.match(/\/login$/)) {
-		return res.redirect(loginOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
-	}
-	if (registerOverride && req.originalUrl.match(/\/register$/)) {
-		return res.redirect(registerOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
-	}
-
-	// Hook into ip blacklist functionality in core
-	try {
-		await meta.blacklist.test(req.ip);
-	} catch (error) {
-		if (hasSession) {
-			await logoutAsync(req);
-			res.locals.fullRefresh = true;
-		}
-
-		await plugin.cleanup({ res: res });
-		return handleGuest.call(null, req, res);
-	}
-
-	if (Object.keys(req.cookies).length && req.cookies.hasOwnProperty(plugin.settings.cookieName) && req.cookies[plugin.settings.cookieName].length) {
+	
+	if (Object.keys(req.headers[plugin.settings.headerName]).length) {
 		try {
-			const uid = await plugin.process(req.cookies[plugin.settings.cookieName]);
-			if (uid === req.uid) {
-				winston.verbose(`[session-sharing] Re-validated login for uid ${uid}, path ${req.originalUrl}`);
-				return;
-			}
-
-			winston.verbose('[session-sharing] Processing login for uid ' + uid + ', path ' + req.originalUrl);
+			const uid = await plugin.process(req.headers[plugin.settings.headerName], req, res);
+			if(!uid) return;
+			winston.verbose('[feide-authentication] Processing login for uid ' + uid + ', path ' + req.originalUrl);
 			await nbbAuthController.doLogin(req, uid);
-
 			req.session.loginLock = true;
-			const url = req.session.returnTo || req.originalUrl.replace(nconf.get('relative_path'), '');
 			delete req.session.returnTo;
-			res.redirect(nconf.get('relative_path') + url);
 		} catch (error) {
-			let handleAsGuest = false;
 
 			switch (error.message) {
 			case 'payload-invalid':
-				winston.warn('[session-sharing] The passed-in payload was invalid and could not be processed');
+				winston.warn('[feide-authentication] The passed-in payload was invalid and could not be processed');
 				break;
 			case 'no-match':
-				winston.info('[session-sharing] Payload valid, but local account not found.  Assuming guest.');
-				handleAsGuest = true;
+				winston.info('[feide-authentication] Payload valid, but local account not found.  Assuming guest.');
 				break;
 			default:
-				winston.warn('[session-sharing] Error encountered while parsing token: ' + error.message);
+				winston.warn('[feide-authentication] Error encountered while parsing token: ' + error.message);
 				break;
 			}
-
 			const data = await plugins.hooks.fire('filter:sessionSharing.error', {
 				error,
 				res: res,
 				settings: plugin.settings,
-				handleAsGuest: handleAsGuest,
 			});
 
-			if (data.handleAsGuest) {
-				return handleGuest.call(error, req, res);
-			}
-
 			throw error;
-		}
-	} else if (hasSession) {
-		// Has login session but no cookie, can assume "revalidate" behaviour
-		const isAdmin = await user.isAdministrator(req.user.uid);
-
-		if (plugin.settings.behaviour !== 'update' && (plugin.settings.adminRevalidate === 'on' || !isAdmin)) {
-			winston.verbose(`[session-sharing] Found login session but no cookie, logging out user (was uid ${req.uid})`);
-			await logoutAsync(req);
-			res.locals.fullRefresh = true;
-			return handleGuest(req, res);
 		}
 	} else {
 		return handleGuest.call(null, req, res);
 	}
-};
-
-plugin.cleanup = async (data) => {
-	if (plugin.settings.cookieDomain) {
-		winston.verbose('[session-sharing] Clearing cookie');
-		data.res.clearCookie(plugin.settings.cookieName, {
-			domain: plugin.settings.cookieDomain,
-			expires: new Date(),
-			path: '/',
-		});
-	}
-
-	data.res.clearCookie('nbb_token', {
-		domain: plugin.settings.cookieDomain,
-		expires: new Date(),
-		path: '/',
-	});
-
-	return true;
-};
-
-plugin.generate = function (req, res) {
-	if (!plugin.ready) {
-		return res.sendStatus(404);
-	}
-
-	let payload = {};
-	payload[plugin.settings['payload:id']] = 1;
-	payload[plugin.settings['payload:username']] = 'testUser';
-	payload[plugin.settings['payload:email']] = 'testUser@example.org';
-	payload[plugin.settings['payload:firstName']] = 'Test';
-	payload[plugin.settings['payload:lastName']] = 'User';
-	payload[plugin.settings['payload:location']] = 'Testlocation';
-	payload[plugin.settings['payload:birthday']] = '04/01/1981';
-	payload[plugin.settings['payload:website']] = 'nodebb.org';
-	payload[plugin.settings['payload:aboutme']] = 'I am just testing';
-	payload[plugin.settings['payload:signature']] = 'T User';
-	payload[plugin.settings['payload:groupTitle']] = 'TestUsers';
-	payload[plugin.settings['payload:groups']] = ['test-group'];
-
-	if (plugin.settings.payloadParent || plugin.settings['payload:parent']) {
-		const parentKey = plugin.settings.payloadParent || plugin.settings['payload:parent'];
-		const newPayload = {};
-		newPayload[parentKey] = payload;
-		payload = newPayload;
-	}
-
-	const token = jwt.sign(payload, plugin.settings.secret);
-	res.cookie(plugin.settings.cookieName, token, {
-		maxAge: 1000 * 60 * 60 * 24 * 21,
-		httpOnly: true,
-		domain: plugin.settings.cookieDomain,
-	});
-
-	res.sendStatus(200);
 };
 
 plugin.addAdminNavigation = async (header) => {
@@ -548,14 +440,10 @@ plugin.reloadSettings = async (data) => {
 	}
 
 	const settings = await meta.settings.get('session-sharing');
-	if (!settings.hasOwnProperty('secret') || !settings.secret.length) {
-		winston.error('[session-sharing] JWT Secret not found, session sharing disabled.');
-		return;
-	}
 
 	// If "payload:parent" is found, but payloadParent is not, update the latter and delete the former
 	if (!settings.payloadParent && settings['payload:parent']) {
-		winston.verbose('[session-sharing] Migrating payload:parent to payloadParent');
+		winston.verbose('[feide-authentication] Migrating payload:parent to payloadParent');
 		settings.payloadParent = settings['payload:parent'];
 		await db.setObjectField('settings:session-sharing', 'payloadParent', settings.payloadParent);
 		await db.deleteObjectField('settings:session-sharing', 'payload:parent');
@@ -565,7 +453,7 @@ plugin.reloadSettings = async (data) => {
 		settings['payload:username'] = 'username';
 	}
 
-	winston.info('[session-sharing] Settings OK');
+	winston.info('[feide-authentication] Settings OK');
 	plugin.settings = _.defaults(_.pickBy(settings, Boolean), plugin.settings);
 	plugin.ready = true;
 };
@@ -586,23 +474,41 @@ plugin.appendTemplate = async (data) => {
 	return data;
 };
 
-plugin.saveReverseToken = async ({ req, userData: data }) => {
-	if (!plugin.ready || !data || plugin.settings.reverseToken !== 'on') {
-		return;	// no reverse token if secret not set
+const fetchUserInfo = async (url, token) => {
+	try {
+	  const response = await fetch(url, {
+		headers: {
+		  Authorization: token,
+		},
+	  });
+	  if (response.ok) {
+		return await response.json();
+	  }
+	  winston.warn('[feide-authentication] ID is invalid');
+	  return null;
+	} catch (error) {
+	  winston.warn('[feide-authentication] An error occurred', error);
+	  throwError('An error occurred while validating ID');
 	}
+  };
+  
+const validateToken = async (token, userInfoUrl) => {
+	const userInfo = await fetchUserInfo(userInfoUrl, token);
+	if (userInfo) {
+		winston.info('ID is valid:', userInfo);
+		return userInfo;
+	}
+	return null;
+};
 
-	const res = req.res;
-	const userData = await user.getUserFields(data.uid, ['uid', 'username', 'picture', 'reputation', 'postcount', 'banned']);
-	userData.groups = (await groups.getUserGroups([data.uid])).pop();
-	const token = jwt.sign(userData, plugin.settings.secret);
-
-	res.cookie('nbb_token', token, {
-		maxAge: meta.getSessionTTLSeconds() * 1000,
-		httpOnly: true,
-		domain: plugin.settings.cookieDomain,
-	});
-
-	winston.info(`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`);
+const validateMemberStatus = async (token, memberStatusUrl, validRoles) => {
+	const userInfo = await fetchUserInfo(memberStatusUrl, token);
+	if (userInfo && validRoles.some(role => userInfo.eduPersonAffiliation.includes(role))) {
+		winston.info('ID is valid for role:', userInfo);
+		return true;
+	}
+	winston.warn('[feide-authentication] ID is invalid for role');
+	return false;
 };
 
 module.exports = plugin;

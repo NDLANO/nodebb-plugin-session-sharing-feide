@@ -1,16 +1,15 @@
 {
-	"id": "nodebb-plugin-session-sharing",
-	"url": "https://github.com/julianlam/nodebb-plugin-session-sharing",
+	"id": "nodebb-plugin-session-sharing-feide",
+	"url": "https://github.com/NDLANO/nodebb-plugin-session-sharing-feide",
 	"library": "./library.js",
 	"hooks": [
-		{ "hook": "response:router.page", "method": "addMiddleware" },
+		{ "hook": "filter:middleware.autoLocale", "method": "addMiddleware" },
 		{ "hook": "static:app.load", "method": "init" },
 		{ "hook": "filter:admin.header.build", "method": "addAdminNavigation" },
 		{ "hook": "static:user.loggedOut", "method": "cleanup" },
 		{ "hook": "filter:config.get", "method": "appendConfig" },
 		{ "hook": "filter:middleware.render", "method": "appendTemplate" },
-		{ "hook": "action:settings.set", "method": "reloadSettings" },
-		{ "hook": "action:login.continue", "method": "saveReverseToken" }
+		{ "hook": "action:settings.set", "method": "reloadSettings" }
 	],
 	"scripts": [
 		"static/lib/main.js"
