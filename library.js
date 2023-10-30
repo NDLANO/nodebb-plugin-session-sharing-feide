@@ -234,11 +234,9 @@ plugin.findOrCreateUser = async (userData, req) => {
 	const { id } = userData;
 	let isNewUser = false;
 	let userId = null;
-	let feideId = await db.getSortedSetMembers(plugin.settings.name + ':feideId' + userData.sub);
-	let uid = await db.sortedSetScore(plugin.settings.name + ':feideId', feideId);
+	let uid = await db.sortedSetScore(plugin.settings.name + ':feideId', userData.sub);
 	uid = parseInt(uid, 10);
-	/* check if found something to work with */
-	if (feideId) {
+	if (uid) {
 		try {
 			/* check if the user with the given id actually exists */
 			const exists = await user.exists(uid);
