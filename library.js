@@ -41,6 +41,7 @@ const payloadKeys = profileFields.concat([
 	'picture',
 	'groups',
 	'name',
+	'uid',
 ]);
 
 const plugin = {
@@ -127,13 +128,13 @@ plugin.getUser = async (remoteId) => {
 
 plugin.process = async (token, request, response) => {
 	try{
-		const userData = await validateToken(token, userInfoUrl)
+		const userDataResult = await validateToken(token, userInfoUrl)
 		.then(userInfo => {
 			if (userInfo) {
 				return validateMemberStatus(token, memberStatusUrl, validRoles)
-					.then(isValidMember => {
+					.then(({isValidMember, uid }) => {
 						if(isValidMember) {
-							return userInfo;
+							return { ...userInfo, uid};
 						}
 						response.status(403).send('Forbidden');
 					});
@@ -143,6 +144,7 @@ plugin.process = async (token, request, response) => {
 		.catch(error => {
 			console.error('An error occurred:', error);
 		});
+		const userData = userDataResult ? userDataResult : null;
 		if(userData) {
 			const normalizedUserData = await plugin.normalizePayload(userData);
 			const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData, request);
@@ -184,9 +186,12 @@ plugin.normalizePayload = async (payload) => {
 	userData.fullname = (userData.fullname || userData.name || [userData.firstName, userData.lastName].join(' ')).trim();
 
 	if (!userData.username) {
-		userData.username = userData.fullname;
+		if (Array.isArray(userData.uid) && userData.uid.length > 0) {
+			userData.username = userData.uid[0];
+		  } else {
+			winston.warn('[feide-authentication] uid is not an array or is an empty array');
+		  }
 	}
-
 	/* strip username from illegal characters */
 	userData.username = userData.username.trim().replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
 
@@ -229,8 +234,7 @@ plugin.findOrCreateUser = async (userData, req) => {
 	const { id } = userData;
 	let isNewUser = false;
 	let userId = null;
-	let queries = [db.getSortedSetMembers(plugin.settings.name + ':feideId', userData.sub)];
-	let feideId = await Promise.all(queries);
+	let feideId = await db.getSortedSetMembers(plugin.settings.name + ':feideId' + userData.sub);
 	let uid = await db.sortedSetScore(plugin.settings.name + ':feideId', feideId);
 	uid = parseInt(uid, 10);
 	/* check if found something to work with */
@@ -505,10 +509,10 @@ const validateMemberStatus = async (token, memberStatusUrl, validRoles) => {
 	const userInfo = await fetchUserInfo(memberStatusUrl, token);
 	if (userInfo && validRoles.some(role => userInfo.eduPersonAffiliation.includes(role))) {
 		winston.info('ID is valid for role:', userInfo);
-		return true;
+		return { isValidMember: true, uid: userInfo.uid };
 	}
 	winston.warn('[feide-authentication] ID is invalid for role');
-	return false;
+	return { isValidMember: false };
 };
 
 module.exports = plugin;
