@@ -185,13 +185,14 @@ plugin.normalizePayload = async (payload) => {
 
 	userData.fullname = (userData.fullname || userData.name || [userData.firstName, userData.lastName].join(' ')).trim();
 
-	if (!userData.username) {
-		if (Array.isArray(userData.uid) && userData.uid.length > 0) {
-			userData.username = userData.uid[0];
-		  } else {
-			winston.warn('[feide-authentication] uid is not an array or is an empty array');
-		  }
+	if (Array.isArray(userData.uid) && userData.uid.length > 0) {
+		userData.username = userData.uid[0];
+	} else {
+		winston.warn('[feide-authentication] uid is not an array or is an empty array');
 	}
+
+	if(!userData.username) userData.username = userData.fullname.replace(" ", "_");
+
 	/* strip username from illegal characters */
 	userData.username = userData.username.trim().replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
 
