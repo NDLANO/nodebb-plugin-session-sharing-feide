@@ -355,13 +355,16 @@ async function executeJoinLeave(uid, join, leave) {
 }
 
 plugin.createUser = async (userData) => {
-	const  email = userData.email
+	const email = userData.email
 
 	winston.verbose('[feide-authentication] No user found, creating a new user for this login');
 	const uid = await user.create(_.pick(userData, profileFields));
 	await db.sortedSetAdd(plugin.settings.name + ':feideId', uid, userData.sub);
-	await user.setUserField(uid, 'email', email);
-	await user.email.confirmByUid(uid);
+	if (email) {
+		await user.setUserField(uid, 'email', email);
+		await user.email.confirmByUid(uid);
+	}
+	
 	return uid;
 };
 
