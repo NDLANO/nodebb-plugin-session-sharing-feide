@@ -255,7 +255,7 @@ plugin.findOrCreateUser = async (userData, req) => {
 
 	/* create the user from payload if necessary */
 	winston.debug('createUser?', !userId);
-	if (!userId && req.method == "POST") {
+	if (!userId && (req.method === "POST" || req.path === '/api/config')) {
 		if (plugin.settings.noRegistration === 'on') {
 			throw new Error('no-match');
 		}
@@ -355,9 +355,16 @@ async function executeJoinLeave(uid, join, leave) {
 }
 
 plugin.createUser = async (userData) => {
+	const email = userData.email
+
 	winston.verbose('[feide-authentication] No user found, creating a new user for this login');
 	const uid = await user.create(_.pick(userData, profileFields));
 	await db.sortedSetAdd(plugin.settings.name + ':feideId', uid, userData.sub);
+	if (email) {
+		await user.setUserField(uid, 'email', email);
+		await user.email.confirmByUid(uid);
+	}
+
 	return uid;
 };
 
@@ -391,7 +398,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 			res.redirect(nconf.get('relative_path') + req.url);
 		}
 	}
-	
+
 	if (Object.keys(req.headers[plugin.settings.headerName]).length) {
 		try {
 			const uid = await plugin.process(req.headers[plugin.settings.headerName], req, res);
@@ -494,7 +501,7 @@ const fetchUserInfo = async (url, token) => {
 	  throwError('An error occurred while validating ID');
 	}
   };
-  
+
 const validateToken = async (token, userInfoUrl) => {
 	const userInfo = await fetchUserInfo(userInfoUrl, token);
 	if (userInfo) {
