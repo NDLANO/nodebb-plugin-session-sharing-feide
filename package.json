@@ -25,24 +25,35 @@
       "git add"
     ]
   },
+  "scripts": {
+    "lint": "yarn format-check && yarn lint-es",
+    "lint-es": "eslint --cache --cache-location '.eslintcache/' --ext .js,.jsx,.ts,.tsx --max-warnings=0 lib static library.js",
+    "format": "prettier '**/*(*.js|*.jsx|*.ts|*.tsx|*.graphql)' --write",
+    "format-check": "prettier '**/*(*.js|*.jsx|*.ts|*.tsx|*.graphql)' --check",
+    "check-all": "yarn format-check && yarn lint-es"
+  },
   "dependencies": {
     "@commitlint/cli": "^9.1.2",
     "async": "^3",
-    "eslint": "^7.7.0",
-    "jsonwebtoken": "^8.5.1",
     "lint-staged": "^10.0.9",
     "lodash": "^4.17.14",
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
+    "typescript": "^5.3.2",
+    "@babel/core": "^7.23.2",
+    "@babel/preset-env": "^7.23.2",
+    "@babel/preset-react": "^7.22.15",
+    "@babel/preset-typescript": "^7.23.2",
     "@commitlint/cli": "^9.1.2",
     "@commitlint/config-angular": "^7.1.2",
-    "eslint": "^7.7.0",
-    "eslint-config-airbnb-base": "^12.1.0",
+    "eslint": "^8.54.0",
+    "eslint-config-ndla": "^3.3.0",
     "eslint-plugin-import": "^2.8.0",
     "husky": "^2.4.0",
     "lint-staged": "^10.0.9",
     "request": "^2.88.2",
-    "request-promise-native": "^1.0.9"
+    "request-promise-native": "^1.0.9",
+    "prettier": "^3.1.0"
   }
 }
