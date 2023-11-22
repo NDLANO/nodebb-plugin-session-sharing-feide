@@ -619,11 +619,14 @@ const fetchUserInfo = async (url, token) => {
 const fetchOrganizationInfo = async (url, token) => {
   const organizationalInfo = await fetchUserInfo(url, token);
   if (!organizationalInfo) return null;
-  
-  const primarySchoolOrganization = organizationalInfo.find(org => org.membership?.primarySchool === true);
-  const primaryOrFirst = (primarySchoolOrganization ? primarySchoolOrganization : organizationalInfo[0]);
-  return primaryOrFirst.displayName;
 
+  const primarySchoolOrganization = organizationalInfo.find(
+    (org) => org.membership?.primarySchool === true,
+  );
+  const primaryOrFirst = primarySchoolOrganization
+    ? primarySchoolOrganization
+    : organizationalInfo[0];
+  return primaryOrFirst.displayName;
 };
 
 const validateToken = async (token, userInfoUrl) => {
