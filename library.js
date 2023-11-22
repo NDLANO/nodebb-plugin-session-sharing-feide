@@ -62,13 +62,6 @@ payloadKeys.forEach(function (key) {
   plugin.settings['payload:' + key] = key;
 });
 
-plugin.init = async (params) => {
-  var router = params.router;
-  var hostMiddleware = params.middleware;
-
-  await plugin.reloadSettings();
-};
-
 plugin.appendConfig = async (config) => {
   config.sessionSharing = {
     logoutRedirect: plugin.settings.logoutRedirect,
