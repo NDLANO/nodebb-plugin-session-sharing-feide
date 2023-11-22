@@ -618,7 +618,7 @@ const fetchUserInfo = async (url, token) => {
 
 const fetchOrganizationInfo = async (url, token) => {
   const organizationalInfo = await fetchUserInfo(url, token);
-  if (organizationalInfo.length == 1) {
+  if (organizationalInfo.length === 1) {
     return organizationalInfo[0].displayName;
   }
   if (organizationalInfo) {
