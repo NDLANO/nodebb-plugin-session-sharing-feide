@@ -427,8 +427,6 @@ plugin.createUser = async (token, userData) => {
   );
   userData.location = organizationalInfo;
 
-  console.log(userData);
-
   winston.verbose(
     '[feide-authentication] No user found, creating a new user for this login',
   );
