@@ -21,21 +21,22 @@ const nbbAuthController = require.main.require(
 
 const userInfoUrl = 'https://auth.dataporten.no/openid/userinfo';
 const memberStatusUrl = 'https://api.dataporten.no/userinfo/v1/userinfo';
-const organizationalInfoUrl = 'https://groups-api.dataporten.no/groups/me/groups'
+const organizationalInfoUrl =
+  'https://groups-api.dataporten.no/groups/me/groups';
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
 const profileFields = [
-	'username',
-	'email',
-	'fullname',
-	'website',
-	'location',
-	'groupTitle',
-	'birthday',
-	'signature',
-	'aboutme',
-	'location',
+  'username',
+  'email',
+  'fullname',
+  'website',
+  'location',
+  'groupTitle',
+  'birthday',
+  'signature',
+  'aboutme',
+  'location',
 ];
 const payloadKeys = profileFields.concat([
   'sub', // the uniq identifier of that account
@@ -420,10 +421,13 @@ async function executeJoinLeave(uid, join, leave) {
 plugin.createUser = async (token, userData) => {
   const email = userData.email;
 
-  const organizationalInfo = await fetchOrganizationInfo(organizationalInfoUrl, token);
-	userData.location = organizationalInfo;
+  const organizationalInfo = await fetchOrganizationInfo(
+    organizationalInfoUrl,
+    token,
+  );
+  userData.location = organizationalInfo;
 
-  console.log(userData)
+  console.log(userData);
 
   winston.verbose(
     '[feide-authentication] No user found, creating a new user for this login',
@@ -615,13 +619,13 @@ const fetchUserInfo = async (url, token) => {
 };
 
 const fetchOrganizationInfo = async (url, token) => {
-	const organizationalInfo = await fetchUserInfo(url, token)
-	if (organizationalInfo){
-		return organizationalInfo[0].displayName;
-	}
-	return null;
+  const organizationalInfo = await fetchUserInfo(url, token);
+  if (organizationalInfo) {
+    return organizationalInfo[0].displayName;
+  }
+  return null;
 };
-  
+
 const validateToken = async (token, userInfoUrl) => {
   const userInfo = await fetchUserInfo(userInfoUrl, token);
   if (userInfo) {
