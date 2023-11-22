@@ -21,6 +21,8 @@ const nbbAuthController = require.main.require(
 
 const userInfoUrl = 'https://auth.dataporten.no/openid/userinfo';
 const memberStatusUrl = 'https://api.dataporten.no/userinfo/v1/userinfo';
+const organizationalInfoUrl =
+  'https://groups-api.dataporten.no/groups/me/groups';
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
@@ -34,6 +36,7 @@ const profileFields = [
   'birthday',
   'signature',
   'aboutme',
+  'location',
 ];
 const payloadKeys = profileFields.concat([
   'sub', // the uniq identifier of that account
@@ -163,6 +166,7 @@ plugin.process = async (token, request, response) => {
     if (userData) {
       const normalizedUserData = await plugin.normalizePayload(userData);
       const [uid, isNewUser] = await plugin.findOrCreateUser(
+        token,
         normalizedUserData,
         request,
       );
@@ -271,7 +275,7 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
   }
 };
 
-plugin.findOrCreateUser = async (userData, req) => {
+plugin.findOrCreateUser = async (token, userData, req) => {
   const { id } = userData;
   let isNewUser = false;
   let userId = null;
@@ -305,7 +309,7 @@ plugin.findOrCreateUser = async (userData, req) => {
     if (plugin.settings.noRegistration === 'on') {
       throw new Error('no-match');
     }
-    userId = await plugin.createUser(userData);
+    userId = await plugin.createUser(token, userData);
     isNewUser = true;
   }
 
@@ -414,8 +418,14 @@ async function executeJoinLeave(uid, join, leave) {
   ]);
 }
 
-plugin.createUser = async (userData) => {
+plugin.createUser = async (token, userData) => {
   const email = userData.email;
+
+  const organizationalInfo = await fetchOrganizationInfo(
+    organizationalInfoUrl,
+    token,
+  );
+  userData.location = organizationalInfo;
 
   winston.verbose(
     '[feide-authentication] No user found, creating a new user for this login',
@@ -604,6 +614,19 @@ const fetchUserInfo = async (url, token) => {
     winston.warn('[feide-authentication] An error occurred', error);
     throw Error('An error occurred while validating ID');
   }
+};
+
+const fetchOrganizationInfo = async (url, token) => {
+  const organizationalInfo = await fetchUserInfo(url, token);
+  if (!organizationalInfo) return null;
+
+  const primarySchoolOrganization = organizationalInfo.find(
+    (org) => org.membership?.primarySchool === true,
+  );
+  const primaryOrFirst = primarySchoolOrganization
+    ? primarySchoolOrganization
+    : organizationalInfo[0];
+  return primaryOrFirst.displayName;
 };
 
 const validateToken = async (token, userInfoUrl) => {
