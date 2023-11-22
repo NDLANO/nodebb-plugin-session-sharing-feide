@@ -618,13 +618,14 @@ const fetchUserInfo = async (url, token) => {
 
 const fetchOrganizationInfo = async (url, token) => {
   const organizationalInfo = await fetchUserInfo(url, token);
-  console.log(organizationalInfo.length)
-  if(organizationalInfo.length == 1){
+  if (organizationalInfo.length == 1) {
     return organizationalInfo[0].displayName;
   }
   if (organizationalInfo) {
-    const primarySchoolOrganization = organizationalInfo.find(org => org.membership && org.membership.primarySchool === true);
-    if(primarySchoolOrganization) return primarySchoolOrganization.displayName;
+    const primarySchoolOrganization = organizationalInfo.find(
+      (org) => org.membership && org.membership.primarySchool === true,
+    );
+    if (primarySchoolOrganization) return primarySchoolOrganization.displayName;
     else return organizationalInfo[0].displayName;
   }
   return null;
