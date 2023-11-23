@@ -13,8 +13,6 @@ const db = require.main.require('./src/database');
 const plugins = require.main.require('./src/plugins');
 
 const fetch = require('node-fetch');
-
-//const controllers = require('./lib/controllers');
 const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
