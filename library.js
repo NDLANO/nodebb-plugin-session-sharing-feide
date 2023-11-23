@@ -354,7 +354,6 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
   }
 };
 
-
 plugin.createUser = async (token, userData) => {
   const email = userData.email;
 
