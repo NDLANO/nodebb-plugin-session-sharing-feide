@@ -7,7 +7,6 @@ const pick = require('lodash/pick');
 
 const meta = require.main.require('./src/meta');
 const user = require.main.require('./src/user');
-const groups = require.main.require('./src/groups');
 const SocketPlugins = require.main.require('./src/socket.io/plugins');
 const db = require.main.require('./src/database');
 const plugins = require.main.require('./src/plugins');
@@ -171,7 +170,6 @@ plugin.process = async (token, request, response) => {
         request,
       );
       await plugin.updateUserProfile(uid, userData, isNewUser);
-      await plugin.updateUserGroups(uid, userData);
       await plugin.verifyUser(token, uid, isNewUser);
       return uid;
     }
@@ -235,16 +233,6 @@ plugin.normalizePayload = async (payload) => {
       '[feide-authentication] No valid username could be determined',
     );
     throw new Error('payload-invalid');
-  }
-
-  if (
-    Object.prototype.hasOwnProperty.call(userData, 'groups') &&
-    !Array.isArray(userData.groups)
-  ) {
-    winston.warn(
-      '[feide-authentication] Array expected for `groups` in JWT payload. Ignoring.',
-    );
-    delete userData.groups;
   }
 
   winston.verbose('[feide-authentication] Payload verified');
@@ -366,57 +354,6 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
   }
 };
 
-plugin.updateUserGroups = async (uid, userData) => {
-  if (!userData.groups || !Array.isArray(userData.groups)) {
-    return;
-  }
-
-  // Retrieve user groups
-  let [userGroups] = await groups.getUserGroupsFromSet('groups:createtime', [
-    uid,
-  ]);
-  // Normalize user group data to just group names
-  userGroups = userGroups.map((groupObj) => groupObj.name);
-
-  // Build join and leave arrays
-  let join = userData.groups.filter((name) => !userGroups.includes(name));
-  if (plugin.settings.syncGroupList === 'on') {
-    join = join.filter((group) => plugin.settings.syncGroups.includes(group));
-  }
-
-  let leave = userGroups.filter((name) => {
-    // `registered-users` is always a joined group
-    if (name === 'registered-users') {
-      return false;
-    }
-
-    return !userData.groups.includes(name);
-  });
-  if (plugin.settings.syncGroupList === 'on') {
-    leave = leave.filter((group) => plugin.settings.syncGroups.includes(group));
-  }
-
-  await executeJoinLeave(uid, join, leave);
-};
-
-async function executeJoinLeave(uid, join, leave) {
-  await Promise.all([
-    (async () => {
-      if (plugin.settings.syncGroupJoin !== 'on') {
-        return;
-      }
-
-      await Promise.all(join.map((name) => groups.join(name, uid)));
-    })(),
-    (async () => {
-      if (plugin.settings.syncGroupLeave !== 'on') {
-        return;
-      }
-
-      await Promise.all(leave.map((name) => groups.leave(name, uid)));
-    })(),
-  ]);
-}
 
 plugin.createUser = async (token, userData) => {
   const email = userData.email;
