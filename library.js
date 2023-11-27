@@ -20,7 +20,7 @@ const nbbAuthController = require.main.require(
 );
 
 const feiderUserUrl = 'https://api.test.ndla.no/learningpath-api/v1/users/';
-const validRoles = ['teacher'];
+const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
 const profileFields = [
