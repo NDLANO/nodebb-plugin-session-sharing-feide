@@ -156,18 +156,18 @@ plugin.process = async (token, request, response) => {
       response.status(403).send('Forbidden');
       return;
     }
-    if (userInfo) {
-      const normalizedUserData = await plugin.normalizePayload(userInfo);
-      const [uid, isNewUser] = await plugin.findOrCreateUser(
-        token,
-        normalizedUserData,
-        request,
-      );
-      await plugin.updateUserProfile(uid, userInfo, isNewUser);
-      await plugin.updateUserGroups(uid, userInfo);
-      await plugin.verifyUser(token, uid, isNewUser);
-      return uid;
-    }
+    
+    const normalizedUserData = await plugin.normalizePayload(userInfo);
+    const [uid, isNewUser] = await plugin.findOrCreateUser(
+      token,
+      normalizedUserData,
+      request,
+    );
+    await plugin.updateUserProfile(uid, userInfo, isNewUser);
+    await plugin.updateUserGroups(uid, userInfo);
+    await plugin.verifyUser(token, uid, isNewUser);
+    return uid;
+    
   } catch (error) {
     winston.error('Something went wrong', error);
     response.status(500).send('Internal Server Error');
