@@ -19,10 +19,8 @@ const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
 
-const userInfoUrl = 'https://auth.dataporten.no/openid/userinfo';
-const memberStatusUrl = 'https://api.dataporten.no/userinfo/v1/userinfo';
-const organizationalInfoUrl =
-  'https://groups-api.dataporten.no/groups/me/groups';
+const gatewayHost = process.env.API_GATEWAY_HOST ?? 'https://api.test.ndla.no';
+const feiderUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
@@ -144,37 +142,31 @@ plugin.getUser = async (remoteId) => {
 
 plugin.process = async (token, request, response) => {
   try {
-    const userInfo = await validateToken(token, userInfoUrl);
+    const { isValidMember, userInfo } = await getFeideUser(
+      token,
+      feiderUserUrl,
+      validRoles,
+    );
     if (!userInfo) {
       response.status(403).send('Forbidden');
       return;
     }
-
-    const { isValidMember, uid } = await validateMemberStatus(
-      token,
-      memberStatusUrl,
-      validRoles,
-    );
 
     if (!isValidMember) {
       response.status(403).send('Forbidden');
       return;
     }
 
-    const userDataResult = { ...userInfo, uid };
-    const userData = userDataResult ? userDataResult : null;
-    if (userData) {
-      const normalizedUserData = await plugin.normalizePayload(userData);
-      const [uid, isNewUser] = await plugin.findOrCreateUser(
-        token,
-        normalizedUserData,
-        request,
-      );
-      await plugin.updateUserProfile(uid, userData, isNewUser);
-      await plugin.updateUserGroups(uid, userData);
-      await plugin.verifyUser(token, uid, isNewUser);
-      return uid;
-    }
+    const normalizedUserData = await plugin.normalizePayload(userInfo);
+    const [uid, isNewUser] = await plugin.findOrCreateUser(
+      token,
+      normalizedUserData,
+      request,
+    );
+    await plugin.updateUserProfile(uid, userInfo, isNewUser);
+    await plugin.updateUserGroups(uid, userInfo);
+    await plugin.verifyUser(token, uid, isNewUser);
+    return uid;
   } catch (error) {
     winston.error('Something went wrong', error);
     response.status(500).send('Internal Server Error');
@@ -183,7 +175,6 @@ plugin.process = async (token, request, response) => {
 
 plugin.normalizePayload = async (payload) => {
   const userData = {};
-
   if (plugin.settings.payloadParent) {
     payload = payload[plugin.settings.payloadParent];
   }
@@ -202,25 +193,15 @@ plugin.normalizePayload = async (payload) => {
       userData[key] = payload[propName];
     }
   });
-
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
     throw new Error('payload-invalid');
   }
-
   userData.fullname = (
     userData.fullname ||
     userData.name ||
     [userData.firstName, userData.lastName].join(' ')
   ).trim();
-
-  if (Array.isArray(userData.uid) && userData.uid.length > 0) {
-    userData.username = userData.uid[0];
-  } else {
-    winston.warn(
-      '[feide-authentication] uid is not an array or is an empty array',
-    );
-  }
 
   if (!userData.username)
     userData.username = userData.fullname.replace(' ', '_');
@@ -304,15 +285,14 @@ plugin.findOrCreateUser = async (token, userData, req) => {
   }
 
   /* create the user from payload if necessary */
-  winston.debug('createUser?', !userId);
+  winston.debug('createUser?', !uid);
   if (!userId && (req.method === 'POST' || req.path === '/api/config')) {
     if (plugin.settings.noRegistration === 'on') {
       throw new Error('no-match');
     }
-    userId = await plugin.createUser(token, userData);
+    userId = await plugin.createUser(userData);
     isNewUser = true;
   }
-
   return [userId, isNewUser];
 };
 
@@ -418,14 +398,8 @@ async function executeJoinLeave(uid, join, leave) {
   ]);
 }
 
-plugin.createUser = async (token, userData) => {
+plugin.createUser = async (userData) => {
   const email = userData.email;
-
-  const organizationalInfo = await fetchOrganizationInfo(
-    organizationalInfoUrl,
-    token,
-  );
-  userData.location = organizationalInfo;
 
   winston.verbose(
     '[feide-authentication] No user found, creating a new user for this login',
@@ -598,11 +572,11 @@ plugin.appendTemplate = async (data) => {
   return data;
 };
 
-const fetchUserInfo = async (url, token) => {
+const fetchUserInfo = async (url, token, headers) => {
   try {
     const response = await fetch(url, {
       headers: {
-        Authorization: token,
+        [headers]: token,
       },
     });
     if (response.ok) {
@@ -616,39 +590,40 @@ const fetchUserInfo = async (url, token) => {
   }
 };
 
-const fetchOrganizationInfo = async (url, token) => {
-  const organizationalInfo = await fetchUserInfo(url, token);
-  if (!organizationalInfo) return null;
-
-  const primarySchoolOrganization = organizationalInfo.find(
-    (org) => org.membership?.primarySchool === true,
+const getFeideUser = async (token, feiderUserUrl, validRoles) => {
+  const userInfo = await fetchUserInfo(
+    feiderUserUrl,
+    token,
+    'feideauthorization',
   );
-  const primaryOrFirst = primarySchoolOrganization
-    ? primarySchoolOrganization
-    : organizationalInfo[0];
-  return primaryOrFirst.displayName;
-};
-
-const validateToken = async (token, userInfoUrl) => {
-  const userInfo = await fetchUserInfo(userInfoUrl, token);
-  if (userInfo) {
-    winston.info('ID is valid:', userInfo);
-    return userInfo;
-  }
-  return null;
-};
-
-const validateMemberStatus = async (token, memberStatusUrl, validRoles) => {
-  const userInfo = await fetchUserInfo(memberStatusUrl, token);
   if (
     userInfo &&
-    validRoles.some((role) => userInfo.eduPersonAffiliation.includes(role))
+    validRoles.some((role) => userInfo.role === role) &&
+    userInfo.arenaEnabled === true
   ) {
-    winston.info('ID is valid for role:', userInfo);
-    return { isValidMember: true, uid: userInfo.uid };
+    const transformedUserInfo = await extractUserInfo(userInfo);
+    return {
+      isValidMember: true,
+      userInfo: transformedUserInfo,
+    };
   }
-  winston.warn('[feide-authentication] ID is invalid for role');
   return { isValidMember: false };
+};
+
+const extractUserInfo = async (jsonData) => {
+  const primarySchoolGroup = jsonData.groups.find(
+    (group) => group.isPrimarySchool,
+  );
+  return {
+    fullname: jsonData.displayName,
+    sub: jsonData.feideId,
+    email: jsonData.email,
+    username: jsonData.username,
+    role: jsonData.role,
+    location: primarySchoolGroup
+      ? primarySchoolGroup.displayName
+      : jsonData.organization,
+  };
 };
 
 module.exports = plugin;
