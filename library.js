@@ -20,8 +20,7 @@ const nbbAuthController = require.main.require(
 );
 
 const gatewayHost = process.env.API_GATEWAY_HOST;
-
-const feiderUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
+const feiderUserUrl = gatewayHost ? `${gatewayHost}/learningpath-api/v1/users/` : 'https://api.test.ndla.no/learningpath-api/v1/users/';
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
@@ -157,17 +156,15 @@ plugin.process = async (token, request, response) => {
       response.status(403).send('Forbidden');
       return;
     }
-    const userDataResult = { ...userInfo };
-    const userData = userDataResult ? userDataResult : null;
-    if (userData) {
-      const normalizedUserData = await plugin.normalizePayload(userData);
+    if (userInfo) {
+      const normalizedUserData = await plugin.normalizePayload(userInfo);
       const [uid, isNewUser] = await plugin.findOrCreateUser(
         token,
         normalizedUserData,
         request,
       );
-      await plugin.updateUserProfile(uid, userData, isNewUser);
-      await plugin.updateUserGroups(uid, userData);
+      await plugin.updateUserProfile(uid, userInfo, isNewUser);
+      await plugin.updateUserGroups(uid, userInfo);
       await plugin.verifyUser(token, uid, isNewUser);
       return uid;
     }
