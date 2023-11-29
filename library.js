@@ -143,7 +143,7 @@ plugin.getUser = async (remoteId) => {
 
 plugin.process = async (token, request, response) => {
   try {
-    const { isValidMember, uid, userInfo } = await getFeideUser(
+    const { isValidMember, userInfo } = await getFeideUser(
       token,
       feiderUserUrl,
       validRoles,
@@ -157,8 +157,7 @@ plugin.process = async (token, request, response) => {
       response.status(403).send('Forbidden');
       return;
     }
-
-    const userDataResult = { ...userInfo, uid };
+    const userDataResult = { ...userInfo };
     const userData = userDataResult ? userDataResult : null;
     if (userData) {
       const normalizedUserData = await plugin.normalizePayload(userData);
@@ -198,25 +197,15 @@ plugin.normalizePayload = async (payload) => {
       userData[key] = payload[propName];
     }
   });
-
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
     throw new Error('payload-invalid');
   }
-
   userData.fullname = (
     userData.fullname ||
     userData.name ||
     [userData.firstName, userData.lastName].join(' ')
   ).trim();
-
-  if (Array.isArray(userData.uid) && userData.uid.length > 0) {
-    userData.username = userData.uid[0];
-  } else {
-    winston.warn(
-      '[feide-authentication] uid is not an array or is an empty array',
-    );
-  }
 
   if (!userData.username)
     userData.username = userData.fullname.replace(' ', '_');
@@ -300,15 +289,14 @@ plugin.findOrCreateUser = async (token, userData, req) => {
   }
 
   /* create the user from payload if necessary */
-  winston.debug('createUser?', !userId);
+  winston.debug('createUser?', !uid);
   if (!userId && (req.method === 'POST' || req.path === '/api/config')) {
     if (plugin.settings.noRegistration === 'on') {
       throw new Error('no-match');
     }
-    userId = await plugin.createUser(token, userData);
+    userId = await plugin.createUser(userData);
     isNewUser = true;
   }
-
   return [userId, isNewUser];
 };
 
@@ -414,7 +402,7 @@ async function executeJoinLeave(uid, join, leave) {
   ]);
 }
 
-plugin.createUser = async (token, userData) => {
+plugin.createUser = async (userData) => {
   const email = userData.email;
 
   winston.verbose(
@@ -615,12 +603,11 @@ const getFeideUser = async (token, feiderUserUrl, validRoles) => {
   if (
     userInfo &&
     validRoles.some((role) => userInfo.role.includes(role)) &&
-    userInfo.arenaEnabled === false
+    userInfo.arenaEnabled === true
   ) {
     const transformedUserInfo = await extractUserInfo(userInfo);
     return {
       isValidMember: true,
-      uid: transformedUserInfo.username,
       userInfo: transformedUserInfo,
     };
   }
@@ -631,13 +618,11 @@ const extractUserInfo = async (jsonData) => {
   const primarySchoolGroup = jsonData.groups.find(
     (group) => group.isPrimarySchool,
   );
-
   return {
     fullname: jsonData.displayName,
     sub: jsonData.feideId,
-    email: jsonData.username,
+    email: jsonData.email,
     username: jsonData.username,
-    uid: jsonData.username,
     role: jsonData.role,
     location: primarySchoolGroup
       ? primarySchoolGroup.displayName
