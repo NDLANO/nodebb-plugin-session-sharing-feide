@@ -20,7 +20,9 @@ const nbbAuthController = require.main.require(
 );
 
 const gatewayHost = process.env.API_GATEWAY_HOST;
-const feiderUserUrl = gatewayHost ? `${gatewayHost}/learningpath-api/v1/users/` : 'https://api.test.ndla.no/learningpath-api/v1/users/';
+const feiderUserUrl = gatewayHost
+  ? `${gatewayHost}/learningpath-api/v1/users/`
+  : 'https://api.test.ndla.no/learningpath-api/v1/users/';
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
@@ -156,7 +158,7 @@ plugin.process = async (token, request, response) => {
       response.status(403).send('Forbidden');
       return;
     }
-    
+
     const normalizedUserData = await plugin.normalizePayload(userInfo);
     const [uid, isNewUser] = await plugin.findOrCreateUser(
       token,
@@ -167,7 +169,6 @@ plugin.process = async (token, request, response) => {
     await plugin.updateUserGroups(uid, userInfo);
     await plugin.verifyUser(token, uid, isNewUser);
     return uid;
-    
   } catch (error) {
     winston.error('Something went wrong', error);
     response.status(500).send('Internal Server Error');
