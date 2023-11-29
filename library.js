@@ -19,7 +19,8 @@ const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
 
-const gatewayHost = `http://${process.env.API_GATEWAY_HOST}` ?? 'https://api.test.ndla.no';
+const gatewayHost =
+  `http://${process.env.API_GATEWAY_HOST}` ?? 'https://api.test.ndla.no';
 const feideUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
@@ -142,10 +143,7 @@ plugin.getUser = async (remoteId) => {
 
 plugin.process = async (token, request, response) => {
   try {
-    const { isValidMember, userInfo } = await getFeideUser(
-      token,
-      validRoles,
-    );
+    const { isValidMember, userInfo } = await getFeideUser(token, validRoles);
     if (!userInfo) {
       response.status(403).send('Forbidden');
       return;
@@ -590,10 +588,7 @@ const fetchUserInfo = async (token, headers) => {
 };
 
 const getFeideUser = async (token, validRoles) => {
-  const userInfo = await fetchUserInfo(
-    token,
-    'feideauthorization',
-  );
+  const userInfo = await fetchUserInfo(token, 'feideauthorization');
   if (
     userInfo &&
     validRoles.some((role) => userInfo.role === role) &&
