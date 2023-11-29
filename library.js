@@ -19,10 +19,8 @@ const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
 
-const gatewayHost = process.env.API_GATEWAY_HOST;
-const feiderUserUrl = gatewayHost
-  ? `${gatewayHost}/learningpath-api/v1/users/`
-  : 'https://api.test.ndla.no/learningpath-api/v1/users/';
+const gatewayHost = process.env.API_GATEWAY_HOST ?? 'https://api.test.ndla.no';
+const feiderUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
