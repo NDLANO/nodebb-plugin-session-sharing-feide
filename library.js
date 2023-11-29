@@ -598,7 +598,7 @@ const getFeideUser = async (token, feiderUserUrl, validRoles) => {
   );
   if (
     userInfo &&
-    validRoles.some((role) => userInfo.role === role &&
+    validRoles.some((role) => userInfo.role === role) &&
     userInfo.arenaEnabled === true
   ) {
     const transformedUserInfo = await extractUserInfo(userInfo);
