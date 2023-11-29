@@ -19,8 +19,9 @@ const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
 
-const gatewayHost = process.env.API_GATEWAY_HOST ?? 'https://api.test.ndla.no';
-const feiderUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
+const gatewayHost =
+  `http://${process.env.API_GATEWAY_HOST}` ?? 'https://api.test.ndla.no';
+const feideUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
@@ -142,11 +143,7 @@ plugin.getUser = async (remoteId) => {
 
 plugin.process = async (token, request, response) => {
   try {
-    const { isValidMember, userInfo } = await getFeideUser(
-      token,
-      feiderUserUrl,
-      validRoles,
-    );
+    const { isValidMember, userInfo } = await getFeideUser(token, validRoles);
     if (!userInfo) {
       response.status(403).send('Forbidden');
       return;
@@ -572,9 +569,9 @@ plugin.appendTemplate = async (data) => {
   return data;
 };
 
-const fetchUserInfo = async (url, token, headers) => {
+const fetchUserInfo = async (token, headers) => {
   try {
-    const response = await fetch(url, {
+    const response = await fetch(feideUserUrl, {
       headers: {
         [headers]: token,
       },
@@ -590,12 +587,8 @@ const fetchUserInfo = async (url, token, headers) => {
   }
 };
 
-const getFeideUser = async (token, feiderUserUrl, validRoles) => {
-  const userInfo = await fetchUserInfo(
-    feiderUserUrl,
-    token,
-    'feideauthorization',
-  );
+const getFeideUser = async (token, validRoles) => {
+  const userInfo = await fetchUserInfo(token, 'feideauthorization');
   if (
     userInfo &&
     validRoles.some((role) => userInfo.role === role) &&
