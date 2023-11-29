@@ -19,14 +19,9 @@ const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
 
-// eslint-disable-next-line no-unused-vars
-const environment = process.env.NDLA_ENVIRONMENT;
+const environment = process.env.API_GATEWAY_HOST;
 
-// eslint-disable-next-line no-template-curly-in-string
-const feiderUserUrl =
-  environment === 'prod'
-    ? 'https://api.ndla.no/learningpath-api/v1/users/'
-    : `https://api.${environment}.ndla.no/learningpath-api/v1/users/`;
+const feiderUserUrl = `${environment}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
