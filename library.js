@@ -155,10 +155,7 @@ plugin.process = async (token, request, response) => {
       return;
     }
     const normalizedUserData = await plugin.normalizePayload(userInfo);
-    const [uid, isNewUser] = await plugin.findOrCreateUser(
-      normalizedUserData,
-      request,
-    );
+    const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
     await plugin.updateUserProfile(uid, userInfo, isNewUser);
     await plugin.updateUserGroups(uid, userInfo);
     await plugin.verifyUser(token, uid, isNewUser);
@@ -249,7 +246,7 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
   }
 };
 
-plugin.findOrCreateUser = async (userData, req) => {
+plugin.findOrCreateUser = async (userData) => {
   const { id } = userData;
   let isNewUser = false;
   let userId = null;
