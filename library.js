@@ -153,7 +153,6 @@ plugin.process = async (token, request, response) => {
       response.status(403).send('Forbidden');
       return;
     }
-    console.log("This is process: ", userInfo)
     const normalizedUserData = await plugin.normalizePayload(userInfo);
     const [uid, isNewUser] = await plugin.findOrCreateUser(
       normalizedUserData,
@@ -170,8 +169,6 @@ plugin.process = async (token, request, response) => {
 };
 
 plugin.normalizePayload = async (payload) => {
-  console.log("payload: ", payload);
-  const userData = {};
   if (plugin.settings.payloadParent) {
     payload = payload[plugin.settings.payloadParent];
   }
@@ -184,13 +181,13 @@ plugin.normalizePayload = async (payload) => {
     throw new Error('payload-invalid');
   }
 
-  payloadKeys.forEach(function (key) {
-    const propName = plugin.settings['payload:' + key];
-    if (payload[propName]) {
-      userData[key] = payload[propName];
-    }
-  });
-  console.log("normalized user data: ", userData)
+  const userData = {
+    username: payload.username,
+    email: payload.email,
+    fullname: payload.fullname,
+    location: payload.location,
+    sub: payload.sub
+  }
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
     throw new Error('payload-invalid');
@@ -200,7 +197,6 @@ plugin.normalizePayload = async (payload) => {
     userData.name ||
     [userData.firstName, userData.lastName].join(' ')
   ).trim();
-  console.log("username 1: ", userData.username);
   if (!userData.username)
     userData.username = userData.fullname.replace(' ', '_');
 
@@ -215,7 +211,6 @@ plugin.normalizePayload = async (payload) => {
     );
     throw new Error('payload-invalid');
   }
-  console.log("username 2: ", userData.username);
   if (
     Object.prototype.hasOwnProperty.call(userData, 'groups') &&
     !Array.isArray(userData.groups)
@@ -234,7 +229,6 @@ plugin.normalizePayload = async (payload) => {
       userData: userData,
     },
   );
-  console.log("username 3: ", userData.username);
   return data.userData;
 };
 
@@ -402,7 +396,6 @@ plugin.createUser = async (userData) => {
     '[feide-authentication] No user found, creating a new user for this login',
   );
   const picked = pick(userData, profileFields);
-  console.log("what we send to create user", picked);
   const uid = await user.create(picked);
   await db.sortedSetAdd(plugin.settings.name + ':feideId', uid, userData.sub);
   if (email) {
@@ -589,15 +582,13 @@ const fetchUserInfo = async (token, headers) => {
 };
 
 const getFeideUser = async (token, validRoles) => {
-  const userInfo2 = await fetchUserInfo(token, 'feideauthorization');
-  console.log("info from feide", userInfo2)
+  const feideInfo = await fetchUserInfo(token, 'feideauthorization');
   if (
-    userInfo2 &&
-    validRoles.some((role) => userInfo2.role === role) &&
-    userInfo2.arenaEnabled === true
+    feideInfo &&
+    validRoles.some((role) => feideInfo.role === role) &&
+    feideInfo.arenaEnabled === true
   ) {
-    const transformedUserInfo = await extractUserInfo(userInfo2);
-    console.log("transformedUserInfo", transformedUserInfo);
+    const transformedUserInfo = await extractUserInfo(feideInfo);
     return {
       isValidMember: true,
       userInfo: transformedUserInfo,
