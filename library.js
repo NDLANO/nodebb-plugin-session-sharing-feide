@@ -278,7 +278,7 @@ plugin.findOrCreateUser = async (userData, req) => {
 
   /* create the user from payload if necessary */
   winston.debug('createUser?', !uid);
-  if (!userId && (req.method === 'POST' || req.path === '/api/config')) {
+  if (!userId) {
     if (plugin.settings.noRegistration === 'on') {
       throw new Error('no-match');
     }
