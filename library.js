@@ -20,7 +20,7 @@ const nbbAuthController = require.main.require(
 );
 
 const gatewayHost =
-  `http://${process.env.API_GATEWAY_HOST}` ?? 'https://api.test.ndla.no';
+   'https://api.test.ndla.no';
 const feideUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
@@ -253,7 +253,7 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
   }
 };
 
-plugin.findOrCreateUser = async (token, userData, req) => {
+plugin.findOrCreateUser = async (userData, req) => {
   const { id } = userData;
   let isNewUser = false;
   let userId = null;
@@ -397,10 +397,10 @@ async function executeJoinLeave(uid, join, leave) {
 
 plugin.createUser = async (userData) => {
   const email = userData.email;
-
   winston.verbose(
     '[feide-authentication] No user found, creating a new user for this login',
   );
+  console.log("what we send to create user", picked);
   const picked = pick(userData, profileFields);
   const uid = await user.create(picked);
   await db.sortedSetAdd(plugin.settings.name + ':feideId', uid, userData.sub);
@@ -589,12 +589,14 @@ const fetchUserInfo = async (token, headers) => {
 
 const getFeideUser = async (token, validRoles) => {
   const userInfo = await fetchUserInfo(token, 'feideauthorization');
+  console.log("info from feide", userInfo)
   if (
     userInfo &&
     validRoles.some((role) => userInfo.role === role) &&
     userInfo.arenaEnabled === true
   ) {
     const transformedUserInfo = await extractUserInfo(userInfo);
+    console.log("transformedUserInfo", transformedUserInfo);
     return {
       isValidMember: true,
       userInfo: transformedUserInfo,
