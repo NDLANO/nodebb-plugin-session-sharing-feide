@@ -589,14 +589,14 @@ const fetchUserInfo = async (token, headers) => {
 };
 
 const getFeideUser = async (token, validRoles) => {
-  const userInfo = await fetchUserInfo(token, 'feideauthorization');
-  console.log("info from feide", userInfo)
+  const userInfo2 = await fetchUserInfo(token, 'feideauthorization');
+  console.log("info from feide", userInfo2)
   if (
-    userInfo &&
-    validRoles.some((role) => userInfo.role === role) &&
-    userInfo.arenaEnabled === true
+    userInfo2 &&
+    validRoles.some((role) => userInfo2.role === role) &&
+    userInfo2.arenaEnabled === true
   ) {
-    const transformedUserInfo = await extractUserInfo(userInfo);
+    const transformedUserInfo = await extractUserInfo(userInfo2);
     console.log("transformedUserInfo", transformedUserInfo);
     return {
       isValidMember: true,
