@@ -190,6 +190,7 @@ plugin.normalizePayload = async (payload) => {
       userData[key] = payload[propName];
     }
   });
+  console.log(userData)
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
     throw new Error('payload-invalid');
