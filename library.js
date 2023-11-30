@@ -20,7 +20,7 @@ const nbbAuthController = require.main.require(
 );
 
 const gatewayHost =
-   'https://api.test.ndla.no';
+  `http://${process.env.API_GATEWAY_HOST}` ?? 'https://api.test.ndla.no';
 const feideUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
@@ -186,8 +186,8 @@ plugin.normalizePayload = async (payload) => {
     email: payload.email,
     fullname: payload.fullname,
     location: payload.location,
-    sub: payload.sub
-  }
+    sub: payload.sub,
+  };
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
     throw new Error('payload-invalid');
