@@ -19,8 +19,9 @@ const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
 
-const gatewayHost =
-  `http://${process.env.API_GATEWAY_HOST}` ?? 'https://api.test.ndla.no';
+const gatewayHost = process.env.API_GATEWAY_HOST
+  ? `http://${process.env.API_GATEWAY_HOST}`
+  : `https://api.test.ndla.no`;
 const feideUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
