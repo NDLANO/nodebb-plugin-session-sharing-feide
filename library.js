@@ -58,7 +58,7 @@ const plugin = {
     noRegistration: 'off',
     payloadParent: undefined,
     allowBannedUsers: false,
-    updateProfile: "on",
+    updateProfile: 'on',
   },
 };
 
