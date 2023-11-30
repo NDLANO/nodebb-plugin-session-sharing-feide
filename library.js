@@ -170,6 +170,7 @@ plugin.process = async (token, request, response) => {
 };
 
 plugin.normalizePayload = async (payload) => {
+  console.log("payload: ", payload);
   const userData = {};
   if (plugin.settings.payloadParent) {
     payload = payload[plugin.settings.payloadParent];
@@ -198,7 +199,7 @@ plugin.normalizePayload = async (payload) => {
     userData.name ||
     [userData.firstName, userData.lastName].join(' ')
   ).trim();
-
+  console.log("username 1: ", userData.username);
   if (!userData.username)
     userData.username = userData.fullname.replace(' ', '_');
 
@@ -213,7 +214,7 @@ plugin.normalizePayload = async (payload) => {
     );
     throw new Error('payload-invalid');
   }
-
+  console.log("username 2: ", userData.username);
   if (
     Object.prototype.hasOwnProperty.call(userData, 'groups') &&
     !Array.isArray(userData.groups)
@@ -232,7 +233,7 @@ plugin.normalizePayload = async (payload) => {
       userData: userData,
     },
   );
-
+  console.log("username 3: ", userData.username);
   return data.userData;
 };
 
