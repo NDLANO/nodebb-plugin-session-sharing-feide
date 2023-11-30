@@ -399,8 +399,8 @@ plugin.createUser = async (userData) => {
   winston.verbose(
     '[feide-authentication] No user found, creating a new user for this login',
   );
-  console.log("what we send to create user", picked);
   const picked = pick(userData, profileFields);
+  console.log("what we send to create user", picked);
   const uid = await user.create(picked);
   await db.sortedSetAdd(plugin.settings.name + ':feideId', uid, userData.sub);
   if (email) {
