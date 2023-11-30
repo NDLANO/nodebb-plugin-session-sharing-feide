@@ -19,8 +19,9 @@ const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
 
-const gatewayHost =
-  `http://${process.env.API_GATEWAY_HOST}` ?? 'https://api.test.ndla.no';
+const gatewayHost = process.env.API_GATEWAY_HOST
+  ? `http://${process.env.API_GATEWAY_HOST}`
+  : `https://api.test.ndla.no`;
 const feideUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
 const validRoles = ['employee'];
 
@@ -153,14 +154,9 @@ plugin.process = async (token, request, response) => {
       response.status(403).send('Forbidden');
       return;
     }
-
     const normalizedUserData = await plugin.normalizePayload(userInfo);
-    const [uid, isNewUser] = await plugin.findOrCreateUser(
-      token,
-      normalizedUserData,
-      request,
-    );
-    await plugin.updateUserProfile(uid, userInfo, isNewUser);
+    const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
+    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser);
     await plugin.updateUserGroups(uid, userInfo);
     await plugin.verifyUser(token, uid, isNewUser);
     return uid;
@@ -171,7 +167,6 @@ plugin.process = async (token, request, response) => {
 };
 
 plugin.normalizePayload = async (payload) => {
-  const userData = {};
   if (plugin.settings.payloadParent) {
     payload = payload[plugin.settings.payloadParent];
   }
@@ -184,12 +179,13 @@ plugin.normalizePayload = async (payload) => {
     throw new Error('payload-invalid');
   }
 
-  payloadKeys.forEach(function (key) {
-    const propName = plugin.settings['payload:' + key];
-    if (payload[propName]) {
-      userData[key] = payload[propName];
-    }
-  });
+  const userData = {
+    username: payload.username,
+    email: payload.email,
+    fullname: payload.fullname,
+    location: payload.location,
+    sub: payload.sub,
+  };
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
     throw new Error('payload-invalid');
@@ -199,7 +195,6 @@ plugin.normalizePayload = async (payload) => {
     userData.name ||
     [userData.firstName, userData.lastName].join(' ')
   ).trim();
-
   if (!userData.username)
     userData.username = userData.fullname.replace(' ', '_');
 
@@ -214,7 +209,6 @@ plugin.normalizePayload = async (payload) => {
     );
     throw new Error('payload-invalid');
   }
-
   if (
     Object.prototype.hasOwnProperty.call(userData, 'groups') &&
     !Array.isArray(userData.groups)
@@ -233,7 +227,6 @@ plugin.normalizePayload = async (payload) => {
       userData: userData,
     },
   );
-
   return data.userData;
 };
 
@@ -253,7 +246,7 @@ plugin.verifyUser = async (token, uid, isNewUser) => {
   }
 };
 
-plugin.findOrCreateUser = async (token, userData, req) => {
+plugin.findOrCreateUser = async (userData) => {
   const { id } = userData;
   let isNewUser = false;
   let userId = null;
@@ -283,7 +276,7 @@ plugin.findOrCreateUser = async (token, userData, req) => {
 
   /* create the user from payload if necessary */
   winston.debug('createUser?', !uid);
-  if (!userId && (req.method === 'POST' || req.path === '/api/config')) {
+  if (!userId) {
     if (plugin.settings.noRegistration === 'on') {
       throw new Error('no-match');
     }
@@ -397,7 +390,6 @@ async function executeJoinLeave(uid, join, leave) {
 
 plugin.createUser = async (userData) => {
   const email = userData.email;
-
   winston.verbose(
     '[feide-authentication] No user found, creating a new user for this login',
   );
@@ -588,13 +580,13 @@ const fetchUserInfo = async (token, headers) => {
 };
 
 const getFeideUser = async (token, validRoles) => {
-  const userInfo = await fetchUserInfo(token, 'feideauthorization');
+  const feideInfo = await fetchUserInfo(token, 'feideauthorization');
   if (
-    userInfo &&
-    validRoles.some((role) => userInfo.role === role) &&
-    userInfo.arenaEnabled === true
+    feideInfo &&
+    validRoles.some((role) => feideInfo.role === role) &&
+    feideInfo.arenaEnabled === true
   ) {
-    const transformedUserInfo = await extractUserInfo(userInfo);
+    const transformedUserInfo = await extractUserInfo(feideInfo);
     return {
       isValidMember: true,
       userInfo: transformedUserInfo,
