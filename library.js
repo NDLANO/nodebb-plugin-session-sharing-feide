@@ -58,6 +58,7 @@ const plugin = {
     noRegistration: 'off',
     payloadParent: undefined,
     allowBannedUsers: false,
+    updateProfile: "on",
   },
 };
 
@@ -156,7 +157,7 @@ plugin.process = async (token, request, response) => {
     }
     const normalizedUserData = await plugin.normalizePayload(userInfo);
     const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
-    await plugin.updateUserProfile(uid, userInfo, isNewUser);
+    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser);
     await plugin.updateUserGroups(uid, userInfo);
     await plugin.verifyUser(token, uid, isNewUser);
     return uid;
