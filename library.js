@@ -156,7 +156,6 @@ plugin.process = async (token, request, response) => {
 
     const normalizedUserData = await plugin.normalizePayload(userInfo);
     const [uid, isNewUser] = await plugin.findOrCreateUser(
-      token,
       normalizedUserData,
       request,
     );
