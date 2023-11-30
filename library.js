@@ -153,7 +153,7 @@ plugin.process = async (token, request, response) => {
       response.status(403).send('Forbidden');
       return;
     }
-
+    console.log("This is process: ", userInfo)
     const normalizedUserData = await plugin.normalizePayload(userInfo);
     const [uid, isNewUser] = await plugin.findOrCreateUser(
       normalizedUserData,
@@ -190,7 +190,7 @@ plugin.normalizePayload = async (payload) => {
       userData[key] = payload[propName];
     }
   });
-  console.log(userData)
+  console.log("normalized user data: ", userData)
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
     throw new Error('payload-invalid');
