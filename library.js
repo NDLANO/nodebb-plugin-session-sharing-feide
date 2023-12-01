@@ -57,6 +57,7 @@ const plugin = {
     noRegistration: 'off',
     payloadParent: undefined,
     allowBannedUsers: false,
+    updateProfile: 'on',
   },
 };
 
@@ -160,7 +161,7 @@ plugin.process = async (token, request, response) => {
       normalizedUserData,
       request,
     );
-    await plugin.updateUserProfile(uid, userInfo, isNewUser);
+    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser);
     await plugin.updateUserGroups(uid, userInfo);
     await plugin.verifyUser(token, uid, isNewUser);
     return uid;
@@ -298,8 +299,6 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
     'consider updateProfile?',
     isNewUser || plugin.settings.updateProfile === 'on',
   );
-  let userObj = {};
-
   /* even update the profile on a new account, since some fields are not initialized by NodeBB */
   if (!isNewUser && plugin.settings.updateProfile !== 'on') {
     return;
@@ -313,33 +312,14 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
     ) {
       result[field] = userData[field];
     }
-
     return result;
   }, {});
-
-  if (Object.keys(obj).length) {
-    winston.debug('[feide-authentication] Updating profile fields:', obj);
-    obj.uid = uid;
-    try {
-      userObj = await user.updateProfile(uid, obj);
-
-      // If it errors out, not that big of a deal, continue anyway.
-      if (!userObj) {
-        userObj = existingFields;
+  for (const key in obj) {
+    if (profileFields.includes(key)) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        await db.setObjectField('user:' + uid, key, obj[key]);
       }
-    } catch (error) {
-      winston.warn(
-        '[feide-authentication] Unable to update profile information for uid: ' +
-          uid +
-          '(' +
-          error.message +
-          ')',
-      );
     }
-  }
-
-  if (userData.picture) {
-    await db.setObjectField('user:' + uid, 'picture', userData.picture);
   }
 };
 
