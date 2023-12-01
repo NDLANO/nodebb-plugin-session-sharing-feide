@@ -307,12 +307,22 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
     }
     return result;
   }, {});
-  for (const key in obj) {
-    if (profileFields.includes(key)) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        await db.setObjectField('user:' + uid, key, obj[key]);
+  try {
+    for (const key in obj) {
+      if (profileFields.includes(key)) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          await db.setObjectField('user:' + uid, key, obj[key]);
+        }
       }
     }
+  } catch (error) {
+    winston.warn(
+      '[feide-authentication] Unable to update profile information for uid: ' +
+        uid +
+        '(' +
+        error.message +
+        ')',
+    );
   }
 };
 
