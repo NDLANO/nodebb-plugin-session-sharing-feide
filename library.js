@@ -13,8 +13,6 @@ const db = require.main.require('./src/database');
 const plugins = require.main.require('./src/plugins');
 
 const fetch = require('node-fetch');
-
-const controllers = require('./lib/controllers');
 const nbbAuthController = require.main.require(
   './src/controllers/authentication',
 );
@@ -64,23 +62,6 @@ const plugin = {
 payloadKeys.forEach(function (key) {
   plugin.settings['payload:' + key] = key;
 });
-
-plugin.init = async (params) => {
-  var router = params.router;
-  var hostMiddleware = params.middleware;
-
-  router.get(
-    '/admin/plugins/session-sharing',
-    hostMiddleware.admin.buildHeader,
-    controllers.renderAdminPage,
-  );
-  router.get('/api/admin/plugins/session-sharing', controllers.renderAdminPage);
-
-  router.get('/api/session-sharing/lookup', controllers.retrieveUser);
-  router.post('/api/session-sharing/user', controllers.process);
-
-  await plugin.reloadSettings();
-};
 
 plugin.appendConfig = async (config) => {
   config.sessionSharing = {
@@ -493,16 +474,6 @@ plugin.addMiddleware = async function ({ req, res }) {
   } else {
     return handleGuest.call(null, req, res);
   }
-};
-
-plugin.addAdminNavigation = async (header) => {
-  header.plugins.push({
-    route: '/plugins/session-sharing',
-    icon: 'fa-user-secret',
-    name: 'Session Sharing',
-  });
-
-  return header;
 };
 
 plugin.reloadSettings = async (data) => {

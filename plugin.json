@@ -4,8 +4,6 @@
 	"library": "./library.js",
 	"hooks": [
 		{ "hook": "filter:middleware.autoLocale", "method": "addMiddleware" },
-		{ "hook": "static:app.load", "method": "init" },
-		{ "hook": "filter:admin.header.build", "method": "addAdminNavigation" },
 		{ "hook": "static:user.loggedOut", "method": "cleanup" },
 		{ "hook": "filter:config.get", "method": "appendConfig" },
 		{ "hook": "filter:middleware.render", "method": "appendTemplate" },
@@ -13,12 +11,5 @@
 	],
 	"scripts": [
 		"static/lib/main.js"
-	],
-	"modules": {
-		"../admin/plugins/session-sharing.js": "./static/lib/admin.js"
-	},
-	"upgrades": [
-		"upgrades/session_sharing_hash_to_zset.js"
-	],
-	"templates": "static/templates"
+	]
 }

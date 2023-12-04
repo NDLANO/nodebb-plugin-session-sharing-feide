@@ -27,7 +27,7 @@
   },
   "scripts": {
     "lint": "yarn format-check && yarn lint-es",
-    "lint-es": "eslint --cache --cache-location '.eslintcache/' --ext .js,.jsx,.ts,.tsx --max-warnings=0 lib static library.js",
+    "lint-es": "eslint --cache --cache-location '.eslintcache/' --ext .js,.jsx,.ts,.tsx --max-warnings=0 static library.js",
     "format": "prettier '**/*(*.js|*.jsx|*.ts|*.tsx|*.graphql)' --write",
     "format-check": "prettier '**/*(*.js|*.jsx|*.ts|*.tsx|*.graphql)' --check",
     "check-all": "yarn format-check && yarn lint-es"
