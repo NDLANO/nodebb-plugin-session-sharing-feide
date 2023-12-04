@@ -309,10 +309,8 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
   }, {});
   try {
     for (const key in obj) {
-      if (profileFields.includes(key)) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          await db.setObjectField('user:' + uid, key, obj[key]);
-        }
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        await db.setObjectField('user:' + uid, key, obj[key]);
       }
     }
   } catch (error) {
