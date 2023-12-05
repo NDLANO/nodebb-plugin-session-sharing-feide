@@ -1,4 +1,4 @@
-name: 'Publish typescript types'
+name: 'Publish feide plugin'
 on:
   workflow_dispatch:
     inputs: {}
@@ -9,7 +9,7 @@ env:
   CI_GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
   KNOWIT_EMAIL: ${{ secrets.KNOWIT_EMAIL }}
 jobs:
-  generate_typescript:
+  publish_feide_plugin:
     name: Publish feide plugin
     runs-on: ubuntu-latest
     steps:
