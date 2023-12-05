@@ -157,7 +157,7 @@ plugin.process = async (token, request, response) => {
     }
     const normalizedUserData = await plugin.normalizePayload(userInfo);
     const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
-    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser);
+    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser, request);
     await plugin.updateUserGroups(uid, userInfo);
     await plugin.verifyUser(token, uid, isNewUser);
     return uid;
@@ -287,13 +287,17 @@ plugin.findOrCreateUser = async (userData) => {
   return [userId, isNewUser];
 };
 
-plugin.updateUserProfile = async (uid, userData, isNewUser) => {
+plugin.updateUserProfile = async (uid, userData, isNewUser, request) => {
   winston.debug(
     'consider updateProfile?',
     isNewUser || plugin.settings.updateProfile === 'on',
   );
   /* even update the profile on a new account, since some fields are not initialized by NodeBB */
-  if (!isNewUser && plugin.settings.updateProfile !== 'on') {
+  if (
+    !isNewUser &&
+    plugin.settings.updateProfile !== 'on' &&
+    request.path === '/api/config'
+  ) {
     return;
   }
 
@@ -310,7 +314,7 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
   try {
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        await db.setObjectField('user:' + uid, key, obj[key]);
+        db.setObjectField('user:' + uid, key, obj[key]);
       }
     }
   } catch (error) {
