@@ -56,6 +56,7 @@ const plugin = {
     noRegistration: 'off',
     payloadParent: undefined,
     allowBannedUsers: false,
+    updateProfile: 'on',
   },
 };
 
@@ -137,7 +138,7 @@ plugin.process = async (token, request, response) => {
     }
     const normalizedUserData = await plugin.normalizePayload(userInfo);
     const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
-    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser);
+    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser, request);
     await plugin.updateUserGroups(uid, userInfo);
     await plugin.verifyUser(token, uid, isNewUser);
     return uid;
@@ -267,15 +268,17 @@ plugin.findOrCreateUser = async (userData) => {
   return [userId, isNewUser];
 };
 
-plugin.updateUserProfile = async (uid, userData, isNewUser) => {
+plugin.updateUserProfile = async (uid, userData, isNewUser, request) => {
   winston.debug(
     'consider updateProfile?',
     isNewUser || plugin.settings.updateProfile === 'on',
   );
-  let userObj = {};
-
   /* even update the profile on a new account, since some fields are not initialized by NodeBB */
-  if (!isNewUser && plugin.settings.updateProfile !== 'on') {
+  if (
+    !isNewUser &&
+    plugin.settings.updateProfile !== 'on' &&
+    request.path === '/api/config'
+  ) {
     return;
   }
 
@@ -287,33 +290,22 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
     ) {
       result[field] = userData[field];
     }
-
     return result;
   }, {});
-
-  if (Object.keys(obj).length) {
-    winston.debug('[feide-authentication] Updating profile fields:', obj);
-    obj.uid = uid;
-    try {
-      userObj = await user.updateProfile(uid, obj);
-
-      // If it errors out, not that big of a deal, continue anyway.
-      if (!userObj) {
-        userObj = existingFields;
+  try {
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        db.setObjectField('user:' + uid, key, obj[key]);
       }
-    } catch (error) {
-      winston.warn(
-        '[feide-authentication] Unable to update profile information for uid: ' +
-          uid +
-          '(' +
-          error.message +
-          ')',
-      );
     }
-  }
-
-  if (userData.picture) {
-    await db.setObjectField('user:' + uid, 'picture', userData.picture);
+  } catch (error) {
+    winston.warn(
+      '[feide-authentication] Unable to update profile information for uid: ' +
+        uid +
+        '(' +
+        error.message +
+        ')',
+    );
   }
 };
 
