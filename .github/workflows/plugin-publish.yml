@@ -1,0 +1,36 @@
+name: 'Publish feide plugin'
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - library.js
+      - package.json
+      - plugin.json
+env:
+  CI_GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
+  KNOWIT_EMAIL: ${{ secrets.KNOWIT_EMAIL }}
+jobs:
+  publish_feide_plugin:
+    name: Publish feide plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.CI_GITHUB_TOKEN }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18.12'
+      - name: Setup git
+        run: |
+          git config user.email "$KNOWIT_EMAIL"
+          git config user.name "github-actions"
+      - name: Publish feide plugin package
+        run: |
+          yarn
+          yarn publish --non-interactive --access public --patch
+          git push
+          git push --tags
+        env:
+          NPM_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
