@@ -1,7 +1,6 @@
 name: 'Publish feide plugin'
 on:
   workflow_dispatch:
-    inputs: {}
   push:
     branches:
       - master
@@ -26,7 +25,6 @@ jobs:
       - name: Publish feide plugin package
         run: |
           yarn
-          yarn build
           yarn publish --non-interactive --access public --patch
           git push
           git push --tags
