@@ -20,7 +20,7 @@ const nbbAuthController = require.main.require(
 const gatewayHost = process.env.API_GATEWAY_HOST
   ? `http://${process.env.API_GATEWAY_HOST}`
   : `https://api.test.ndla.no`;
-const feideUserUrl = `${gatewayHost}/learningpath-api/v1/users/`;
+const feideUserUrl = `${gatewayHost}/myndla-api/v1/users/`;
 const validRoles = ['employee'];
 
 /* all the user profile fields that can be passed to user.updateProfile */
