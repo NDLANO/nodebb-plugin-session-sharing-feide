@@ -555,9 +555,7 @@ const getFeideUser = async (token, validRoles) => {
       userInfo: transformedUserInfo,
     };
   }
-  if (feideInfo === null) {
-    winston.warn('[Feide-authentication] User ID is invalid.');
-  } else {
+  if (feideInfo !== null) {
     if (!validRoles.some((role) => feideInfo.role === role)) {
       winston.warn('[Feide-authentication] User role is not valid.', {
         userRole: feideInfo.role,
