@@ -558,6 +558,7 @@ const getFeideUser = async (token, validRoles) => {
   if (feideInfo !== null) {
     if (!validRoles.some((role) => feideInfo.role === role)) {
       winston.warn('[Feide-authentication] User role is not valid.', {
+        userId: feideInfo.id,
         userRole: feideInfo.role,
         validRoles,
       });
@@ -566,6 +567,7 @@ const getFeideUser = async (token, validRoles) => {
       winston.warn(
         '[Feide-authentication] User profile has arena enabled set to false.',
         {
+          userId: feideInfo.id,
           arenaEnabled: feideInfo.arenaEnabled,
         },
       );
