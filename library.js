@@ -11,7 +11,7 @@ const groups = require.main.require('./src/groups');
 const SocketPlugins = require.main.require('./src/socket.io/plugins');
 const db = require.main.require('./src/database');
 const plugins = require.main.require('./src/plugins');
-const slugify = require.main.require('./src/modules/slugify');
+const slugify = require.main.require('./public/src/modules/slugify');
 
 const fetch = require('node-fetch');
 const nbbAuthController = require.main.require(
