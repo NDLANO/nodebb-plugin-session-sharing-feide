@@ -35,6 +35,7 @@ const profileFields = [
   'signature',
   'aboutme',
   'location',
+  'userslug',
 ];
 const payloadKeys = profileFields.concat([
   'sub', // the uniq identifier of that account
@@ -167,6 +168,7 @@ plugin.normalizePayload = async (payload) => {
     fullname: payload.fullname,
     location: payload.location,
     sub: payload.sub,
+    userslug: payload.username.replace(/[.@]/g, '-'),
   };
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
