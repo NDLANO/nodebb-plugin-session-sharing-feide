@@ -11,6 +11,7 @@ const groups = require.main.require('./src/groups');
 const SocketPlugins = require.main.require('./src/socket.io/plugins');
 const db = require.main.require('./src/database');
 const plugins = require.main.require('./src/plugins');
+const slugify = require.main.require('./src/modules/slugify');
 
 const fetch = require('node-fetch');
 const nbbAuthController = require.main.require(
@@ -168,7 +169,7 @@ plugin.normalizePayload = async (payload) => {
     fullname: payload.fullname,
     location: payload.location,
     sub: payload.sub,
-    userslug: payload.username.replace(/[.@]/g, '-'),
+    userslug: slugify(payload.username),
   };
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
