@@ -49,7 +49,7 @@ const payloadKeys = profileFields.concat([
 const plugin = {
   ready: false,
   settings: {
-    name: 'appId',
+    name: 'feideId',
     headerName: 'feideauthorization',
     cookieDomain: undefined,
     secret: '',
@@ -236,7 +236,7 @@ plugin.findOrCreateUser = async (userData) => {
   let isNewUser = false;
   let userId = null;
   let uid = await db.sortedSetScore(
-    plugin.settings.name + ':feideId',
+    plugin.settings.name + ':uid',
     userData.sub,
   );
   uid = parseInt(uid, 10);
@@ -371,7 +371,7 @@ plugin.createUser = async (userData) => {
   );
   const picked = pick(userData, profileFields);
   const uid = await user.create(picked);
-  await db.sortedSetAdd(plugin.settings.name + ':feideId', uid, userData.sub);
+  await db.sortedSetAdd(plugin.settings.name + ':uid', uid, userData.sub);
   if (email) {
     await user.setUserField(uid, 'email', email);
     await user.email.confirmByUid(uid);
