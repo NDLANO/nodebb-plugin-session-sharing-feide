@@ -276,12 +276,8 @@ plugin.updateUserProfile = async (uid, userData, isNewUser, request) => {
     'consider updateProfile?',
     isNewUser || plugin.settings.updateProfile === 'on',
   );
-  /* even update the profile on a new account, since some fields are not initialized by NodeBB */
-  if (
-    !isNewUser &&
-    plugin.settings.updateProfile !== 'on' &&
-    request.path === '/api/config'
-  ) {
+  /* only update the profile on a new account, since some fields are not initialized by NodeBB */
+  if (!isNewUser) {
     return;
   }
 
