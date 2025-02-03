@@ -140,7 +140,7 @@ plugin.process = async (token, request, response) => {
     }
     const normalizedUserData = await plugin.normalizePayload(userInfo);
     const [uid, isNewUser] = await plugin.findOrCreateUser(normalizedUserData);
-    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser, request);
+    await plugin.updateUserProfile(uid, normalizedUserData, isNewUser);
     await plugin.updateUserGroups(uid, userInfo);
     await plugin.verifyUser(token, uid, isNewUser);
     return uid;
@@ -271,7 +271,7 @@ plugin.findOrCreateUser = async (userData) => {
   return [userId, isNewUser];
 };
 
-plugin.updateUserProfile = async (uid, userData, isNewUser, request) => {
+plugin.updateUserProfile = async (uid, userData, isNewUser) => {
   winston.debug(
     'consider updateProfile?',
     isNewUser || plugin.settings.updateProfile === 'on',
