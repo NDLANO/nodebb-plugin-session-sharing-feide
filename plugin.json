@@ -1,13 +1,11 @@
 {
-  "id": "nodebb-plugin-session-sharing-feide",
+  "id": "nodebb-plugin-feide-session",
   "url": "https://github.com/NDLANO/nodebb-plugin-session-sharing-feide",
   "library": "./library.js",
   "hooks": [
     { "hook": "filter:middleware.autoLocale", "method": "addMiddleware" },
-    { "hook": "static:user.loggedOut", "method": "cleanup" },
-    { "hook": "filter:config.get", "method": "appendConfig" },
+    { "hook": "static:app.load", "method": "init" },
     { "hook": "filter:middleware.render", "method": "appendTemplate" },
-    { "hook": "action:settings.set", "method": "reloadSettings" }
-  ],
-  "scripts": ["static/lib/main.js"]
+    { "hook": "filter:config.get", "method": "appendConfig" }
+  ]
 }

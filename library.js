@@ -1,5 +1,5 @@
-const winston = module.parent.require('winston');
-const nconf = module.parent.require('nconf');
+const winston = require.main.require('winston');
+const nconf = require.main.require('nconf');
 
 const defaults = require('lodash/defaults');
 const pickBy = require('lodash/pickBy');
@@ -8,10 +8,9 @@ const pick = require('lodash/pick');
 const meta = require.main.require('./src/meta');
 const user = require.main.require('./src/user');
 const groups = require.main.require('./src/groups');
-const SocketPlugins = require.main.require('./src/socket.io/plugins');
 const db = require.main.require('./src/database');
 const plugins = require.main.require('./src/plugins');
-const slugify = require.main.require('./public/src/modules/slugify');
+const slugify = require.main.require('./src/slugify');
 
 const fetch = require('node-fetch');
 const nbbAuthController = require.main.require(
@@ -67,51 +66,14 @@ payloadKeys.forEach(function (key) {
 });
 
 plugin.appendConfig = async (config) => {
-  config.sessionSharing = {
-    logoutRedirect: plugin.settings.logoutRedirect,
-    loginOverride: plugin.settings.loginOverride,
-    registerOverride: plugin.settings.registerOverride,
-    editOverride: plugin.settings.editOverride,
-    hostWhitelist: plugin.settings.hostWhitelist,
-  };
-
   return config;
 };
 
-/* Websocket Listeners */
-
-SocketPlugins.sessionSharing = {};
-
-SocketPlugins.sessionSharing.showUserIds = async (socket, data) => {
-  // Retrieve the hash and find matches
-  const { uids } = data;
-
-  if (!uids.length) {
-    throw new Error('no-uids-supplied');
-  }
-
-  return Promise.all(
-    uids.map(async (uid) =>
-      db.getSortedSetRangeByScore(
-        plugin.settings.name + ':uid',
-        0,
-        -1,
-        uid,
-        uid,
-      ),
-    ),
-  );
+/* Log startup of plugin */
+plugin.init = (data, callback) => {
+  winston.info('[feide-authentication] Initializing...');
+  callback();
 };
-
-SocketPlugins.sessionSharing.findUserByRemoteId = async (socket, data) => {
-  if (!data.remoteId) {
-    throw new Error('no-remote-id-supplied');
-  }
-
-  return plugin.getUser(data.remoteId);
-};
-
-/* End Websocket Listeners */
 
 /*
  *	Given a remoteId, show user data
@@ -169,7 +131,7 @@ plugin.normalizePayload = async (payload) => {
     fullname: payload.fullname,
     location: payload.location,
     sub: payload.sub,
-    userslug: slugify(payload.username),
+    userslug: slugify(payload.username.replace('@', '-')), // slugify doesn not convert @ any more
   };
   if (!userData.sub) {
     winston.warn('[feide-authentication] No user id was given in payload');
@@ -380,7 +342,6 @@ plugin.addMiddleware = async function ({ req, res }) {
   if (!req.headers[plugin.settings.headerName]) {
     return;
   }
-  winston.verbose('[feide-authentication] test rebuild');
   const { hostWhitelist, guestRedirect } =
     await meta.settings.get('session-sharing');
 
@@ -426,7 +387,7 @@ plugin.addMiddleware = async function ({ req, res }) {
         res,
       );
       if (!uid) return;
-      winston.verbose(
+      winston.info(
         '[feide-authentication] Processing login for uid ' +
           uid +
           ', path ' +
@@ -465,42 +426,6 @@ plugin.addMiddleware = async function ({ req, res }) {
   } else {
     return handleGuest.call(null, req, res);
   }
-};
-
-plugin.reloadSettings = async (data) => {
-  // If data argument is truthy, then it is the action hook from core
-  if (data && data.plugin !== 'session-sharing') {
-    return;
-  }
-
-  const settings = await meta.settings.get('session-sharing');
-
-  // If "payload:parent" is found, but payloadParent is not, update the latter and delete the former
-  if (!settings.payloadParent && settings['payload:parent']) {
-    winston.verbose(
-      '[feide-authentication] Migrating payload:parent to payloadParent',
-    );
-    settings.payloadParent = settings['payload:parent'];
-    await db.setObjectField(
-      'settings:session-sharing',
-      'payloadParent',
-      settings.payloadParent,
-    );
-    await db.deleteObjectField('settings:session-sharing', 'payload:parent');
-  }
-
-  if (
-    !settings['payload:username'] &&
-    !settings['payload:firstName'] &&
-    !settings['payload:lastName'] &&
-    !settings['payload:fullname']
-  ) {
-    settings['payload:username'] = 'username';
-  }
-
-  winston.info('[feide-authentication] Settings OK');
-  plugin.settings = defaults(pickBy(settings, Boolean), plugin.settings);
-  plugin.ready = true;
 };
 
 plugin.appendTemplate = async (data) => {
