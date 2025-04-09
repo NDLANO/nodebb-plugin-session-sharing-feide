@@ -1,8 +1,6 @@
 const winston = require.main.require('winston');
 const nconf = require.main.require('nconf');
 
-const defaults = require('lodash/defaults');
-const pickBy = require('lodash/pickBy');
 const pick = require('lodash/pick');
 
 const meta = require.main.require('./src/meta');
