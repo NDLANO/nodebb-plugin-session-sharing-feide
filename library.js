@@ -36,14 +36,9 @@ const profileFields = [
   'aboutme',
   'location',
   'userslug',
+  'feideid',
 ];
-const payloadKeys = profileFields.concat([
-  'sub', // the uniq identifier of that account
-  'picture',
-  'groups',
-  'name',
-  'uid',
-]);
+const payloadKeys = profileFields.concat(['picture', 'groups', 'name', 'uid']);
 
 const plugin = {
   ready: false,
@@ -130,10 +125,10 @@ plugin.normalizePayload = async (payload) => {
     email: payload.email,
     fullname: payload.fullname,
     location: payload.location,
-    sub: payload.sub,
+    feideid: payload.feideid,
     userslug: slugify(payload.username.replace('@', '-')), // slugify doesn not convert @ any more
   };
-  if (!userData.sub) {
+  if (!userData.feideid) {
     winston.warn('[feide-authentication] No user id was given in payload');
     throw new Error('payload-invalid');
   }
@@ -199,7 +194,7 @@ plugin.findOrCreateUser = async (userData) => {
   let userId = null;
   let uid = await db.sortedSetScore(
     plugin.settings.name + ':uid',
-    userData.sub,
+    userData.feideid,
   );
   uid = parseInt(uid, 10);
   if (uid) {
@@ -329,7 +324,7 @@ plugin.createUser = async (userData) => {
   );
   const picked = pick(userData, profileFields);
   const uid = await user.create(picked);
-  await db.sortedSetAdd(plugin.settings.name + ':uid', uid, userData.sub);
+  await db.sortedSetAdd(plugin.settings.name + ':uid', uid, userData.feideid);
   if (email) {
     await user.setUserField(uid, 'email', email);
     await user.email.confirmByUid(uid);
@@ -506,7 +501,7 @@ const extractUserInfo = async (jsonData) => {
   );
   return {
     fullname: jsonData.displayName,
-    sub: jsonData.feideId,
+    feideid: jsonData.feideId,
     email: jsonData.email,
     username: jsonData.username,
     role: jsonData.role,
