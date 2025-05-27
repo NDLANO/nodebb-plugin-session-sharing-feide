@@ -124,7 +124,7 @@ plugin.normalizePayload = async (payload) => {
     fullname: payload.fullname,
     location: payload.location,
     feideid: payload.feideid,
-    userslug: slugify(payload.username.replace('@', '-')), // slugify doesn not convert @ any more
+    userslug: slugify(payload.username.replace('@', '-')), // slugify does not convert @ any more
   };
   if (!userData.feideid) {
     winston.warn('[feide-authentication] No user id was given in payload');
