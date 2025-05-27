@@ -464,7 +464,8 @@ const getFeideUser = async (token, validRoles) => {
   if (
     feideInfo &&
     validRoles.some((role) => feideInfo.role === role) &&
-    feideInfo.arenaEnabled === true
+    feideInfo.arenaEnabled === true &&
+    feideInfo.arenaAccepted === true
   ) {
     const transformedUserInfo = await extractUserInfo(feideInfo);
     return {
@@ -486,6 +487,15 @@ const getFeideUser = async (token, validRoles) => {
         {
           userId: feideInfo.id,
           arenaEnabled: feideInfo.arenaEnabled,
+        },
+      );
+    }
+    if (feideInfo.arenaAccepted === false) {
+      winston.warn(
+        '[Feide-authentication] User profile has arena accepted set to false.',
+        {
+          userId: feideInfo.id,
+          arenaAccepted: feideInfo.arenaAccepted,
         },
       );
     }
