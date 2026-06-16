@@ -550,6 +550,42 @@ plugin.addMiddleware = async function ({ req, res }) {
 			const url =
 				req.session.returnTo ||
 				req.originalUrl.replace(nconf.get('relative_path'), '');
+
+			// The cookie/session-sharing login path bypasses NodeBB's own SSO callback
+			// route, which is what normally walks new users through registration
+			// interstitials such as the Terms of Use / GDPR consent form configured in the
+			// ACP. Replicate that here: if NodeBB reports any outstanding interstitial for
+			// this user, send them through /register/complete before letting them in.
+			// Acceptance is stored per-user (e.g. `acceptTos`), so it is shared with every
+			// other login method and only asked once.
+			try {
+				const { interstitials } = await user.interstitials.get(req, {
+					uid,
+				});
+				if (interstitials && interstitials.length) {
+					winston.verbose(
+						'[feide-session] uid ' +
+							uid +
+							' has ' +
+							interstitials.length +
+							' pending interstitial(s); redirecting to registration completion',
+					);
+					req.session.registration = { uid: uid, returnTo: url };
+					// registerComplete redirects here once interstitials are done
+					req.session.returnTo = url;
+					return res.redirect(
+						nconf.get('relative_path') + '/register/complete',
+					);
+				}
+			} catch (interstitialErr) {
+				// Fail open — never let a consent-check error block login entirely.
+				winston.error(
+					'[feide-session] Error checking registration interstitials for uid ' +
+						uid,
+					interstitialErr,
+				);
+			}
+
 			delete req.session.returnTo;
 			res.redirect(nconf.get('relative_path') + url);
 		} catch (error) {
