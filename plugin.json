@@ -1,6 +1,6 @@
 {
-  "id": "nodebb-plugin-feide-session",
-  "url": "https://github.com/NDLANO/nodebb-plugin-session-sharing-feide",
+	"id": "nodebb-plugin-feide-session",
+	"url": "https://github.com/NDLANO/nodebb-plugin-session-sharing-feide",
 	"library": "./library.js",
 	"hooks": [
 		{ "hook": "response:router.page", "method": "addMiddleware" },
@@ -12,14 +12,8 @@
 		{ "hook": "action:settings.set", "method": "reloadSettings" },
 		{ "hook": "action:login.continue", "method": "saveReverseToken" }
 	],
-	"scripts": [
-		"static/lib/main.js"
-	],
-	"modules": {
-		"../admin/plugins/session-sharing.js": "./static/lib/admin.js"
-	},
-	"upgrades": [
-		"upgrades/session_sharing_hash_to_zset.js"
-	],
+	"scripts": ["static/lib/main.js"],
+	"modules": { "../admin/plugins/feide-session.js": "./static/lib/admin.js" },
+	"upgrades": ["upgrades/session_sharing_hash_to_zset.js"],
 	"templates": "static/templates"
 }

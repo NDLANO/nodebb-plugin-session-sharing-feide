@@ -68,12 +68,12 @@ plugin.init = async (params) => {
 
 	routeHelpers.setupAdminPageRoute(
 		router,
-		'/admin/plugins/session-sharing',
+		'/admin/plugins/feide-session',
 		controllers.renderAdminPage,
 	);
 
-	router.get('/api/session-sharing/lookup', controllers.retrieveUser);
-	router.post('/api/session-sharing/user', controllers.process);
+	router.get('/api/feide-session/lookup', controllers.retrieveUser);
+	router.post('/api/feide-session/user', controllers.process);
 
 	if (process.env.NODE_ENV === 'development') {
 		router.get('/debug/session', plugin.generate);
@@ -83,7 +83,7 @@ plugin.init = async (params) => {
 };
 
 plugin.appendConfig = async (config) => {
-	config.sessionSharing = {
+	config.feideSession = {
 		logoutRedirect: plugin.settings.logoutRedirect,
 		loginOverride: plugin.settings.loginOverride,
 		registerOverride: plugin.settings.registerOverride,
@@ -96,9 +96,9 @@ plugin.appendConfig = async (config) => {
 
 /* Websocket Listeners */
 
-SocketPlugins.sessionSharing = {};
+SocketPlugins.feideSession = {};
 
-SocketPlugins.sessionSharing.showUserIds = async (socket, data) => {
+SocketPlugins.feideSession.showUserIds = async (socket, data) => {
 	// Retrieve the hash and find matches
 	const { uids } = data;
 
@@ -119,7 +119,7 @@ SocketPlugins.sessionSharing.showUserIds = async (socket, data) => {
 	);
 };
 
-SocketPlugins.sessionSharing.findUserByRemoteId = async (socket, data) => {
+SocketPlugins.feideSession.findUserByRemoteId = async (socket, data) => {
 	if (!data.remoteId) {
 		throw new Error('no-remote-id-supplied');
 	}
@@ -160,7 +160,7 @@ plugin.normalizePayload = async (payload) => {
 	}
 
 	if (typeof payload !== 'object') {
-		winston.warn('[session-sharing] the payload is not an object', payload);
+		winston.warn('[feide-session] the payload is not an object', payload);
 		throw new Error('payload-invalid');
 	}
 
@@ -172,7 +172,7 @@ plugin.normalizePayload = async (payload) => {
 	});
 
 	if (!userData.hasOwnProperty('id')) {
-		winston.warn('[session-sharing] No user id was given in payload');
+		winston.warn('[feide-session] No user id was given in payload');
 		throw new Error('payload-invalid');
 	}
 	const setFullname =
@@ -195,18 +195,18 @@ plugin.normalizePayload = async (payload) => {
 		.replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
 
 	if (!userData.username) {
-		winston.warn('[session-sharing] No valid username could be determined');
+		winston.warn('[feide-session] No valid username could be determined');
 		throw new Error('payload-invalid');
 	}
 
 	if (userData.hasOwnProperty('groups') && !Array.isArray(userData.groups)) {
 		winston.warn(
-			'[session-sharing] Array expected for `groups` in JWT payload. Ignoring.',
+			'[feide-session] Array expected for `groups` in JWT payload. Ignoring.',
 		);
 		delete userData.groups;
 	}
 
-	winston.verbose('[session-sharing] Payload verified');
+	winston.verbose('[feide-session] Payload verified');
 	const data = await plugins.hooks.fire(
 		'filter:sessionSharing.normalizePayload',
 		{
@@ -262,16 +262,13 @@ plugin.findOrCreateUser = async (userData) => {
 			}
 		} catch (error) {
 			/* ignore errors, but assume the user doesn't exist  */
-			winston.warn(
-				'[session-sharing] Error while testing user existance',
-				error,
-			);
+			winston.warn('[feide-session] Error while testing user existance', error);
 		}
 	}
 
 	if (!userId && mergeUid && !isNaN(mergeUid)) {
 		winston.info(
-			'[session-sharing] Found user via their email, associating this id (' +
+			'[feide-session] Found user via their email, associating this id (' +
 				id +
 				') with their NodeBB account',
 		);
@@ -318,10 +315,10 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
 	}, {});
 
 	if (Object.keys(obj).length) {
-		winston.debug('[session-sharing] Updating profile fields:', obj);
+		winston.debug('[feide-session] Updating profile fields:', obj);
 		obj.uid = uid;
 		try {
-			const { trustPayloadEmail } = await meta.settings.get('session-sharing');
+			const { trustPayloadEmail } = await meta.settings.get('feide-session');
 			let email = '';
 			if (trustPayloadEmail === 'on') {
 				email = obj.email;
@@ -339,7 +336,7 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
 			}
 		} catch (error) {
 			winston.warn(
-				'[session-sharing] Unable to update profile information for uid: ' +
+				'[feide-session] Unable to update profile information for uid: ' +
 					uid +
 					'(' +
 					error.message +
@@ -407,7 +404,7 @@ async function executeJoinLeave(uid, join, leave) {
 
 plugin.createUser = async (userData) => {
 	winston.verbose(
-		'[session-sharing] No user found, creating a new user for this login',
+		'[feide-session] No user found, creating a new user for this login',
 	);
 
 	const uid = await user.create(_.pick(userData, profileFields));
@@ -422,7 +419,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 		editOverride,
 		loginOverride,
 		registerOverride,
-	} = await meta.settings.get('session-sharing');
+	} = await meta.settings.get('feide-session');
 
 	if (hostWhitelist) {
 		const hosts = hostWhitelist.split(',') || [hostWhitelist];
@@ -536,13 +533,13 @@ plugin.addMiddleware = async function ({ req, res }) {
 			const uid = await plugin.process(req.cookies[plugin.settings.cookieName]);
 			if (uid === req.uid) {
 				winston.verbose(
-					`[session-sharing] Re-validated login for uid ${uid}, path ${req.originalUrl}`,
+					`[feide-session] Re-validated login for uid ${uid}, path ${req.originalUrl}`,
 				);
 				return;
 			}
 
 			winston.verbose(
-				'[session-sharing] Processing login for uid ' +
+				'[feide-session] Processing login for uid ' +
 					uid +
 					', path ' +
 					req.originalUrl,
@@ -561,18 +558,18 @@ plugin.addMiddleware = async function ({ req, res }) {
 			switch (error.message) {
 				case 'payload-invalid':
 					winston.warn(
-						'[session-sharing] The passed-in payload was invalid and could not be processed',
+						'[feide-session] The passed-in payload was invalid and could not be processed',
 					);
 					break;
 				case 'no-match':
 					winston.info(
-						'[session-sharing] Payload valid, but local account not found.  Assuming guest.',
+						'[feide-session] Payload valid, but local account not found.  Assuming guest.',
 					);
 					handleAsGuest = true;
 					break;
 				default:
 					winston.warn(
-						'[session-sharing] Error encountered while parsing token: ' +
+						'[feide-session] Error encountered while parsing token: ' +
 							error.message,
 					);
 					break;
@@ -600,7 +597,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 			(plugin.settings.adminRevalidate === 'on' || !isAdmin)
 		) {
 			winston.verbose(
-				`[session-sharing] Found login session but no cookie, logging out user (was uid ${req.uid})`,
+				`[feide-session] Found login session but no cookie, logging out user (was uid ${req.uid})`,
 			);
 			await logoutAsync(req);
 			res.locals.fullRefresh = true;
@@ -613,7 +610,7 @@ plugin.addMiddleware = async function ({ req, res }) {
 
 plugin.cleanup = async (data) => {
 	if (plugin.settings.cookieDomain) {
-		winston.verbose('[session-sharing] Clearing cookie');
+		winston.verbose('[feide-session] Clearing cookie');
 		data.res.clearCookie(plugin.settings.cookieName, {
 			domain: plugin.settings.cookieDomain,
 			path: '/',
@@ -667,9 +664,9 @@ plugin.generate = function (req, res) {
 
 plugin.addAdminNavigation = async (header) => {
 	header.plugins.push({
-		route: '/plugins/session-sharing',
+		route: '/plugins/feide-session',
 		icon: 'fa-user-secret',
-		name: 'Session Sharing',
+		name: 'Feide Session',
 	});
 
 	return header;
@@ -677,14 +674,14 @@ plugin.addAdminNavigation = async (header) => {
 
 plugin.reloadSettings = async (data) => {
 	// If data argument is truthy, then it is the action hook from core
-	if (data && data.plugin !== 'session-sharing') {
+	if (data && data.plugin !== 'feide-session') {
 		return;
 	}
 
-	const settings = await meta.settings.get('session-sharing');
+	const settings = await meta.settings.get('feide-session');
 	if (!settings.hasOwnProperty('secret') || !settings.secret.length) {
 		winston.error(
-			'[session-sharing] JWT Secret not found, session sharing disabled.',
+			'[feide-session] JWT Secret not found, session sharing disabled.',
 		);
 		return;
 	}
@@ -692,15 +689,15 @@ plugin.reloadSettings = async (data) => {
 	// If "payload:parent" is found, but payloadParent is not, update the latter and delete the former
 	if (!settings.payloadParent && settings['payload:parent']) {
 		winston.verbose(
-			'[session-sharing] Migrating payload:parent to payloadParent',
+			'[feide-session] Migrating payload:parent to payloadParent',
 		);
 		settings.payloadParent = settings['payload:parent'];
 		await db.setObjectField(
-			'settings:session-sharing',
+			'settings:feide-session',
 			'payloadParent',
 			settings.payloadParent,
 		);
-		await db.deleteObjectField('settings:session-sharing', 'payload:parent');
+		await db.deleteObjectField('settings:feide-session', 'payload:parent');
 	}
 
 	if (
@@ -712,7 +709,7 @@ plugin.reloadSettings = async (data) => {
 		settings['payload:username'] = 'username';
 	}
 
-	winston.info('[session-sharing] Settings OK');
+	winston.info('[feide-session] Settings OK');
 	plugin.settings = _.defaults(_.pickBy(settings, Boolean), plugin.defaults);
 	plugin.ready = true;
 };
@@ -761,7 +758,7 @@ plugin.saveReverseToken = async ({ req, userData: data }) => {
 	});
 
 	winston.info(
-		`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`,
+		`[plugins/feide-session] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`,
 	);
 };
 

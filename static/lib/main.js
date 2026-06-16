@@ -1,9 +1,9 @@
 'use strict';
 
 $(document).ready(function () {
-	if (config.sessionSharing && config.sessionSharing.hostWhitelist) {
-		var hosts = config.sessionSharing.hostWhitelist.split(',') || [
-			config.sessionSharing.hostWhitelist,
+	if (config.feideSession && config.feideSession.hostWhitelist) {
+		var hosts = config.feideSession.hostWhitelist.split(',') || [
+			config.feideSession.hostWhitelist,
 		];
 		var whitelisted = false;
 		for (var host of hosts) {
@@ -32,44 +32,44 @@ $(document).ready(function () {
 	}
 
 	$(window).on('action:app.loggedOut', function (evt, data) {
-		if (config.sessionSharing.logoutRedirect) {
-			data.next = config.sessionSharing.logoutRedirect;
+		if (config.feideSession.logoutRedirect) {
+			data.next = config.feideSession.logoutRedirect;
 		}
 	});
 
 	$(window).on('action:ajaxify.end', function (e, data) {
-		if (config.sessionSharing.editOverride) {
+		if (config.feideSession.editOverride) {
 			if (isEditUrl(data.url)) {
 				$('#content').html('');
-				redirect(config.sessionSharing.editOverride, e);
+				redirect(config.feideSession.editOverride, e);
 			}
 
 			$('a[href^="/user/"][href$="/edit"]')
 				.off('click')
-				.on('click', redirectHandler(config.sessionSharing.editOverride));
+				.on('click', redirectHandler(config.feideSession.editOverride));
 		}
 
-		if (config.sessionSharing.registerOverride) {
+		if (config.feideSession.registerOverride) {
 			if (data.url === 'register') {
 				$('#content').html('');
-				redirect(config.sessionSharing.registerOverride, e);
+				redirect(config.feideSession.registerOverride, e);
 			}
 
 			$('a[href="/register"]')
 				.off('click')
-				.on('click', redirectHandler(config.sessionSharing.registerOverride));
+				.on('click', redirectHandler(config.feideSession.registerOverride));
 		}
 
-		if (config.sessionSharing.loginOverride) {
+		if (config.feideSession.loginOverride) {
 			const params = utils.params();
 			if (data.url === 'login' && params && !params.local) {
 				$('#content').html('');
-				redirect(config.sessionSharing.loginOverride, e);
+				redirect(config.feideSession.loginOverride, e);
 			}
 
 			$('a[href="/login"]')
 				.off('click')
-				.on('click', redirectHandler(config.sessionSharing.loginOverride));
+				.on('click', redirectHandler(config.feideSession.loginOverride));
 		}
 
 		if (ajaxify.data.sessionSharingBan) {
@@ -92,27 +92,27 @@ $(document).ready(function () {
 	});
 
 	$(window).on('action:ajaxify.start', function (e, data) {
-		if (config.sessionSharing.editOverride && isEditUrl(data.url)) {
+		if (config.feideSession.editOverride && isEditUrl(data.url)) {
 			data.url = null;
-			redirect(config.sessionSharing.editOverride, e);
+			redirect(config.feideSession.editOverride, e);
 		}
 
 		if (
-			config.sessionSharing.registerOverride &&
+			config.feideSession.registerOverride &&
 			data.url.startsWith('register')
 		) {
 			data.url = null;
-			redirect(config.sessionSharing.registerOverride, e);
+			redirect(config.feideSession.registerOverride, e);
 		}
 		const params = utils.params();
 		if (
-			config.sessionSharing.loginOverride &&
+			config.feideSession.loginOverride &&
 			data.url.startsWith('login') &&
 			params &&
 			!params.local
 		) {
 			data.url = null;
-			redirect(config.sessionSharing.loginOverride, e);
+			redirect(config.feideSession.loginOverride, e);
 		}
 
 		window.localStorage.setItem('sessionSharingLastUrl', window.location.href);

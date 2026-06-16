@@ -15,7 +15,7 @@ const db = require.main.require('./test/mocks/databasemock');
 const nconf = require.main.require('nconf');
 const meta = require.main.require('./src/meta');
 
-describe('nodebb-plugin-session-sharing', () => {
+describe('nodebb-plugin-feide-session', () => {
 	const userJar = request.jar();
 	const anonJar = request.jar();
 	const { protocol, hostname } = url.parse(nconf.get('url'));
@@ -30,7 +30,7 @@ describe('nodebb-plugin-session-sharing', () => {
 
 			assert.strictEqual(response.statusCode, 404);
 
-			await meta.settings.setOne('session-sharing', 'secret', 's3cr37c47');
+			await meta.settings.setOne('feide-session', 'secret', 's3cr37c47');
 		});
 
 		it('should generate a valid session when called', async () => {
@@ -84,7 +84,7 @@ describe('nodebb-plugin-session-sharing', () => {
 
 		it('should redirect a guest to a specified redirection target if configured', async () => {
 			await meta.settings.setOne(
-				'session-sharing',
+				'feide-session',
 				'guestRedirect',
 				'https://example.org',
 			);
@@ -97,14 +97,14 @@ describe('nodebb-plugin-session-sharing', () => {
 
 			assert(response.statusCode, 302);
 			assert.strictEqual(response.headers.location, 'https://example.org');
-			await meta.settings.setOne('session-sharing', 'guestRedirect', '');
+			await meta.settings.setOne('feide-session', 'guestRedirect', '');
 		});
 
 		it('should maintain the login if behaviour is "revalidate"', async () => {
 			const getSession = util.promisify(
 				db.sessionStore.get.bind(db.sessionStore),
 			);
-			await meta.settings.setOne('session-sharing', 'behaviour', 'revalidate');
+			await meta.settings.setOne('feide-session', 'behaviour', 'revalidate');
 
 			await request(`${nconf.get('url')}`, {
 				resolveWithFullResponse: true,
@@ -163,7 +163,7 @@ describe('nodebb-plugin-session-sharing', () => {
 	describe('login override', () => {
 		it('should redirect a guest to a specified login override if configured', async () => {
 			await meta.settings.setOne(
-				'session-sharing',
+				'feide-session',
 				'loginOverride',
 				'https://example.org/login',
 			);
@@ -185,7 +185,7 @@ describe('nodebb-plugin-session-sharing', () => {
 	describe('register override', () => {
 		it('should redirect a guest to a specified register override if configured', async () => {
 			await meta.settings.setOne(
-				'session-sharing',
+				'feide-session',
 				'registerOverride',
 				'https://example.org/register',
 			);

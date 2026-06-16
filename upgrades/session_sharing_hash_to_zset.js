@@ -13,7 +13,7 @@ module.exports = {
 		try {
 			const progress = this.progress;
 			// Reload plugin settings and grab appID setting
-			const settings = await meta.settings.get('session-sharing');
+			const settings = await meta.settings.get('feide-session');
 			winston.verbose('getting data');
 
 			if (!settings.secret) {

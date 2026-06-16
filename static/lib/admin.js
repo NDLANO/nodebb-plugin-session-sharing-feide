@@ -1,13 +1,13 @@
 'use strict';
 
-define('admin/plugins/session-sharing', ['settings'], function (Settings) {
+define('admin/plugins/feide-session', ['settings'], function (Settings) {
 	var ACP = {};
 
 	ACP.init = function () {
-		Settings.load('session-sharing', $('.session-sharing-settings'));
+		Settings.load('feide-session', $('.feide-session-settings'));
 
 		$('#save').on('click', function () {
-			Settings.save('session-sharing', $('.session-sharing-settings'));
+			Settings.save('feide-session', $('.feide-session-settings'));
 		});
 
 		$('#search').on('keyup', ACP.showUserId);
@@ -36,7 +36,7 @@ define('admin/plugins/session-sharing', ['settings'], function (Settings) {
 				.then(function (results) {
 					if (results.users.length) {
 						socket.emit(
-							'plugins.sessionSharing.showUserIds',
+							'plugins.feideSession.showUserIds',
 							{
 								uids: results.users.map(function (user) {
 									return user.uid;
@@ -92,7 +92,7 @@ define('admin/plugins/session-sharing', ['settings'], function (Settings) {
 			}
 
 			socket.emit(
-				'plugins.sessionSharing.findUserByRemoteId',
+				'plugins.feideSession.findUserByRemoteId',
 				{ remoteId: element.val() },
 				function (err, results) {
 					if (!err && results) {
