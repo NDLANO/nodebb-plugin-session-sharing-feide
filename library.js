@@ -17,7 +17,9 @@ const plugins = require.main.require('./src/plugins');
 const routeHelpers = require.main.require('./src/routes/helpers');
 
 const controllers = require('./lib/controllers');
-const nbbAuthController = require.main.require('./src/controllers/authentication');
+const nbbAuthController = require.main.require(
+	'./src/controllers/authentication',
+);
 const logoutAsync = util.promisify((req, callback) => req.logout(callback));
 
 /* all the user profile fields that can be passed to user.updateProfile */
@@ -64,7 +66,11 @@ plugin.defaults = Object.freeze({ ...plugin.settings });
 plugin.init = async (params) => {
 	const { router } = params;
 
-	routeHelpers.setupAdminPageRoute(router, '/admin/plugins/session-sharing', controllers.renderAdminPage);
+	routeHelpers.setupAdminPageRoute(
+		router,
+		'/admin/plugins/session-sharing',
+		controllers.renderAdminPage,
+	);
 
 	router.get('/api/session-sharing/lookup', controllers.retrieveUser);
 	router.post('/api/session-sharing/user', controllers.process);
@@ -101,7 +107,15 @@ SocketPlugins.sessionSharing.showUserIds = async (socket, data) => {
 	}
 
 	return Promise.all(
-		uids.map(async uid => db.getSortedSetRangeByScore(plugin.settings.name + ':uid', 0, -1, uid, uid))
+		uids.map(async (uid) =>
+			db.getSortedSetRangeByScore(
+				plugin.settings.name + ':uid',
+				0,
+				-1,
+				uid,
+				uid,
+			),
+		),
 	);
 };
 
@@ -161,9 +175,14 @@ plugin.normalizePayload = async (payload) => {
 		winston.warn('[session-sharing] No user id was given in payload');
 		throw new Error('payload-invalid');
 	}
-	const setFullname = userData.hasOwnProperty('fullname') || userData.hasOwnProperty('firstName') || userData.hasOwnProperty('lastName');
+	const setFullname =
+		userData.hasOwnProperty('fullname') ||
+		userData.hasOwnProperty('firstName') ||
+		userData.hasOwnProperty('lastName');
 	if (setFullname) {
-		userData.fullname = (userData.fullname || [userData.firstName, userData.lastName].join(' ')).trim();
+		userData.fullname = (
+			userData.fullname || [userData.firstName, userData.lastName].join(' ')
+		).trim();
 	}
 
 	if (!userData.username) {
@@ -171,7 +190,9 @@ plugin.normalizePayload = async (payload) => {
 	}
 
 	/* strip username from illegal characters */
-	userData.username = userData.username.trim().replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
+	userData.username = userData.username
+		.trim()
+		.replace(/[^'"\s\-.*0-9\u00BF-\u1FFF\u2C00-\uD7FF\w]+/, '-');
 
 	if (!userData.username) {
 		winston.warn('[session-sharing] No valid username could be determined');
@@ -179,15 +200,20 @@ plugin.normalizePayload = async (payload) => {
 	}
 
 	if (userData.hasOwnProperty('groups') && !Array.isArray(userData.groups)) {
-		winston.warn('[session-sharing] Array expected for `groups` in JWT payload. Ignoring.');
+		winston.warn(
+			'[session-sharing] Array expected for `groups` in JWT payload. Ignoring.',
+		);
 		delete userData.groups;
 	}
 
 	winston.verbose('[session-sharing] Payload verified');
-	const data = await plugins.hooks.fire('filter:sessionSharing.normalizePayload', {
-		payload: payload,
-		userData: userData,
-	});
+	const data = await plugins.hooks.fire(
+		'filter:sessionSharing.normalizePayload',
+		{
+			payload: payload,
+			userData: userData,
+		},
+	);
 
 	return data.userData;
 };
@@ -236,12 +262,19 @@ plugin.findOrCreateUser = async (userData) => {
 			}
 		} catch (error) {
 			/* ignore errors, but assume the user doesn't exist  */
-			winston.warn('[session-sharing] Error while testing user existance', error);
+			winston.warn(
+				'[session-sharing] Error while testing user existance',
+				error,
+			);
 		}
 	}
 
 	if (!userId && mergeUid && !isNaN(mergeUid)) {
-		winston.info('[session-sharing] Found user via their email, associating this id (' + id + ') with their NodeBB account');
+		winston.info(
+			'[session-sharing] Found user via their email, associating this id (' +
+				id +
+				') with their NodeBB account',
+		);
 		await db.sortedSetAdd(plugin.settings.name + ':uid', mergeUid, id);
 		userId = mergeUid;
 	}
@@ -261,7 +294,10 @@ plugin.findOrCreateUser = async (userData) => {
 };
 
 plugin.updateUserProfile = async (uid, userData, isNewUser) => {
-	winston.debug('consider updateProfile?', isNewUser || plugin.settings.updateProfile === 'on');
+	winston.debug(
+		'consider updateProfile?',
+		isNewUser || plugin.settings.updateProfile === 'on',
+	);
 	let userObj = {};
 
 	/* even update the profile on a new account, since some fields are not initialized by NodeBB */
@@ -271,7 +307,10 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
 
 	const existingFields = await user.getUserFields(uid, profileFields);
 	const obj = profileFields.reduce((result, field) => {
-		if (typeof userData[field] !== 'undefined' && existingFields[field] !== userData[field]) {
+		if (
+			typeof userData[field] !== 'undefined' &&
+			existingFields[field] !== userData[field]
+		) {
 			result[field] = userData[field];
 		}
 
@@ -299,7 +338,13 @@ plugin.updateUserProfile = async (uid, userData, isNewUser) => {
 				userObj = existingFields;
 			}
 		} catch (error) {
-			winston.warn('[session-sharing] Unable to update profile information for uid: ' + uid + '(' + error.message + ')');
+			winston.warn(
+				'[session-sharing] Unable to update profile information for uid: ' +
+					uid +
+					'(' +
+					error.message +
+					')',
+			);
 		}
 	}
 
@@ -314,14 +359,16 @@ plugin.updateUserGroups = async (uid, userData) => {
 	}
 
 	// Retrieve user groups
-	let [userGroups] = await groups.getUserGroupsFromSet('groups:createtime', [uid]);
+	let [userGroups] = await groups.getUserGroupsFromSet('groups:createtime', [
+		uid,
+	]);
 	// Normalize user group data to just group names
-	userGroups = userGroups.map(groupObj => groupObj.name);
+	userGroups = userGroups.map((groupObj) => groupObj.name);
 
 	// Build join and leave arrays
-	let join = userData.groups.filter(name => !userGroups.includes(name));
+	let join = userData.groups.filter((name) => !userGroups.includes(name));
 	if (plugin.settings.syncGroupList === 'on') {
-		join = join.filter(group => plugin.settings.syncGroups.includes(group));
+		join = join.filter((group) => plugin.settings.syncGroups.includes(group));
 	}
 
 	let leave = userGroups.filter((name) => {
@@ -333,7 +380,7 @@ plugin.updateUserGroups = async (uid, userData) => {
 		return !userData.groups.includes(name);
 	});
 	if (plugin.settings.syncGroupList === 'on') {
-		leave = leave.filter(group => plugin.settings.syncGroups.includes(group));
+		leave = leave.filter((group) => plugin.settings.syncGroups.includes(group));
 	}
 
 	await executeJoinLeave(uid, join, leave);
@@ -346,20 +393,22 @@ async function executeJoinLeave(uid, join, leave) {
 				return;
 			}
 
-			await Promise.all(join.map(name => groups.join(name, uid)));
+			await Promise.all(join.map((name) => groups.join(name, uid)));
 		})(),
 		(async () => {
 			if (plugin.settings.syncGroupLeave !== 'on') {
 				return;
 			}
 
-			await Promise.all(leave.map(name => groups.leave(name, uid)));
+			await Promise.all(leave.map((name) => groups.leave(name, uid)));
 		})(),
 	]);
 }
 
 plugin.createUser = async (userData) => {
-	winston.verbose('[session-sharing] No user found, creating a new user for this login');
+	winston.verbose(
+		'[session-sharing] No user found, creating a new user for this login',
+	);
 
 	const uid = await user.create(_.pick(userData, profileFields));
 	await db.sortedSetAdd(plugin.settings.name + ':uid', uid, userData.id);
@@ -367,7 +416,13 @@ plugin.createUser = async (userData) => {
 };
 
 plugin.addMiddleware = async function ({ req, res }) {
-	const { hostWhitelist, guestRedirect, editOverride, loginOverride, registerOverride } = await meta.settings.get('session-sharing');
+	const {
+		hostWhitelist,
+		guestRedirect,
+		editOverride,
+		loginOverride,
+		registerOverride,
+	} = await meta.settings.get('session-sharing');
 
 	if (hostWhitelist) {
 		const hosts = hostWhitelist.split(',') || [hostWhitelist];
@@ -385,22 +440,37 @@ plugin.addMiddleware = async function ({ req, res }) {
 	}
 
 	function handleGuest(req, res) {
-		if (guestRedirect && !req.originalUrl.startsWith(nconf.get('relative_path') + '/login?local=1')) {
+		if (
+			guestRedirect &&
+			!req.originalUrl.startsWith(nconf.get('relative_path') + '/login?local=1')
+		) {
 			// If a guest redirect is specified, follow it
-			res.redirect(guestRedirect.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
+			res.redirect(
+				guestRedirect.replace(
+					'%1',
+					encodeURIComponent(
+						req.protocol + '://' + req.get('host') + req.originalUrl,
+					),
+				),
+			);
 		} else if (res.locals.fullRefresh === true) {
 			res.redirect(nconf.get('relative_path') + req.url);
 		}
 	}
 
 	// Only respond to page loads by guests, not api or asset calls
-	const hasSession = req.hasOwnProperty('user') && req.user.hasOwnProperty('uid') && parseInt(req.user.uid, 10) > 0;
+	const hasSession =
+		req.hasOwnProperty('user') &&
+		req.user.hasOwnProperty('uid') &&
+		parseInt(req.user.uid, 10) > 0;
 	const hasLoginLock = req.session.hasOwnProperty('loginLock');
 
 	if (
 		!plugin.ready || // plugin not ready
 		(plugin.settings.behaviour === 'trust' && hasSession) || // user logged in + "trust" behaviour
-		((plugin.settings.behaviour === 'revalidate' || plugin.settings.behaviour === 'update') && hasLoginLock) ||
+		((plugin.settings.behaviour === 'revalidate' ||
+			plugin.settings.behaviour === 'update') &&
+			hasLoginLock) ||
 		req.originalUrl.startsWith(nconf.get('relative_path') + '/api') // api routes
 	) {
 		// Let requests through under "update" or "revalidate" behaviour only if they're logging in for the first time
@@ -409,14 +479,39 @@ plugin.addMiddleware = async function ({ req, res }) {
 		return;
 	}
 
-	if (editOverride && hasSession && req.originalUrl.match(/\/user\/.*\/edit(\/\w+)?$/)) {
-		return res.redirect(editOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
+	if (
+		editOverride &&
+		hasSession &&
+		req.originalUrl.match(/\/user\/.*\/edit(\/\w+)?$/)
+	) {
+		return res.redirect(
+			editOverride.replace(
+				'%1',
+				encodeURIComponent(
+					req.protocol + '://' + req.get('host') + req.originalUrl,
+				),
+			),
+		);
 	}
 	if (loginOverride && req.originalUrl.match(/\/login$/)) {
-		return res.redirect(loginOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
+		return res.redirect(
+			loginOverride.replace(
+				'%1',
+				encodeURIComponent(
+					req.protocol + '://' + req.get('host') + req.originalUrl,
+				),
+			),
+		);
 	}
 	if (registerOverride && req.originalUrl.match(/\/register$/)) {
-		return res.redirect(registerOverride.replace('%1', encodeURIComponent(req.protocol + '://' + req.get('host') + req.originalUrl)));
+		return res.redirect(
+			registerOverride.replace(
+				'%1',
+				encodeURIComponent(
+					req.protocol + '://' + req.get('host') + req.originalUrl,
+				),
+			),
+		);
 	}
 
 	// Hook into ip blacklist functionality in core
@@ -432,21 +527,32 @@ plugin.addMiddleware = async function ({ req, res }) {
 		return handleGuest.call(null, req, res);
 	}
 
-	if (Object.keys(req.cookies).length &&
+	if (
+		Object.keys(req.cookies).length &&
 		req.cookies.hasOwnProperty(plugin.settings.cookieName) &&
-		req.cookies[plugin.settings.cookieName].length) {
+		req.cookies[plugin.settings.cookieName].length
+	) {
 		try {
 			const uid = await plugin.process(req.cookies[plugin.settings.cookieName]);
 			if (uid === req.uid) {
-				winston.verbose(`[session-sharing] Re-validated login for uid ${uid}, path ${req.originalUrl}`);
+				winston.verbose(
+					`[session-sharing] Re-validated login for uid ${uid}, path ${req.originalUrl}`,
+				);
 				return;
 			}
 
-			winston.verbose('[session-sharing] Processing login for uid ' + uid + ', path ' + req.originalUrl);
+			winston.verbose(
+				'[session-sharing] Processing login for uid ' +
+					uid +
+					', path ' +
+					req.originalUrl,
+			);
 			await nbbAuthController.doLogin(req, uid);
 
 			req.session.loginLock = true;
-			const url = req.session.returnTo || req.originalUrl.replace(nconf.get('relative_path'), '');
+			const url =
+				req.session.returnTo ||
+				req.originalUrl.replace(nconf.get('relative_path'), '');
 			delete req.session.returnTo;
 			res.redirect(nconf.get('relative_path') + url);
 		} catch (error) {
@@ -454,14 +560,21 @@ plugin.addMiddleware = async function ({ req, res }) {
 
 			switch (error.message) {
 				case 'payload-invalid':
-					winston.warn('[session-sharing] The passed-in payload was invalid and could not be processed');
+					winston.warn(
+						'[session-sharing] The passed-in payload was invalid and could not be processed',
+					);
 					break;
 				case 'no-match':
-					winston.info('[session-sharing] Payload valid, but local account not found.  Assuming guest.');
+					winston.info(
+						'[session-sharing] Payload valid, but local account not found.  Assuming guest.',
+					);
 					handleAsGuest = true;
 					break;
 				default:
-					winston.warn('[session-sharing] Error encountered while parsing token: ' + error.message);
+					winston.warn(
+						'[session-sharing] Error encountered while parsing token: ' +
+							error.message,
+					);
 					break;
 			}
 
@@ -482,8 +595,13 @@ plugin.addMiddleware = async function ({ req, res }) {
 		// Has login session but no cookie, can assume "revalidate" behaviour
 		const isAdmin = await user.isAdministrator(req.user.uid);
 
-		if (plugin.settings.behaviour !== 'update' && (plugin.settings.adminRevalidate === 'on' || !isAdmin)) {
-			winston.verbose(`[session-sharing] Found login session but no cookie, logging out user (was uid ${req.uid})`);
+		if (
+			plugin.settings.behaviour !== 'update' &&
+			(plugin.settings.adminRevalidate === 'on' || !isAdmin)
+		) {
+			winston.verbose(
+				`[session-sharing] Found login session but no cookie, logging out user (was uid ${req.uid})`,
+			);
 			await logoutAsync(req);
 			res.locals.fullRefresh = true;
 			return handleGuest(req, res);
@@ -530,7 +648,8 @@ plugin.generate = function (req, res) {
 	payload[plugin.settings['payload:groups']] = ['test-group'];
 
 	if (plugin.settings.payloadParent || plugin.settings['payload:parent']) {
-		const parentKey = plugin.settings.payloadParent || plugin.settings['payload:parent'];
+		const parentKey =
+			plugin.settings.payloadParent || plugin.settings['payload:parent'];
 		const newPayload = {};
 		newPayload[parentKey] = payload;
 		payload = newPayload;
@@ -564,19 +683,32 @@ plugin.reloadSettings = async (data) => {
 
 	const settings = await meta.settings.get('session-sharing');
 	if (!settings.hasOwnProperty('secret') || !settings.secret.length) {
-		winston.error('[session-sharing] JWT Secret not found, session sharing disabled.');
+		winston.error(
+			'[session-sharing] JWT Secret not found, session sharing disabled.',
+		);
 		return;
 	}
 
 	// If "payload:parent" is found, but payloadParent is not, update the latter and delete the former
 	if (!settings.payloadParent && settings['payload:parent']) {
-		winston.verbose('[session-sharing] Migrating payload:parent to payloadParent');
+		winston.verbose(
+			'[session-sharing] Migrating payload:parent to payloadParent',
+		);
 		settings.payloadParent = settings['payload:parent'];
-		await db.setObjectField('settings:session-sharing', 'payloadParent', settings.payloadParent);
+		await db.setObjectField(
+			'settings:session-sharing',
+			'payloadParent',
+			settings.payloadParent,
+		);
 		await db.deleteObjectField('settings:session-sharing', 'payload:parent');
 	}
 
-	if (!settings['payload:username'] && !settings['payload:firstName'] && !settings['payload:lastName'] && !settings['payload:fullname']) {
+	if (
+		!settings['payload:username'] &&
+		!settings['payload:firstName'] &&
+		!settings['payload:lastName'] &&
+		!settings['payload:fullname']
+	) {
 		settings['payload:username'] = 'username';
 	}
 
@@ -586,7 +718,11 @@ plugin.reloadSettings = async (data) => {
 };
 
 plugin.appendTemplate = async (data) => {
-	if (!data.req.session || !data.req.session.sessionSharing || !data.req.session.sessionSharing.banned) {
+	if (
+		!data.req.session ||
+		!data.req.session.sessionSharing ||
+		!data.req.session.sessionSharing.banned
+	) {
 		return data;
 	}
 
@@ -607,7 +743,14 @@ plugin.saveReverseToken = async ({ req, userData: data }) => {
 	}
 
 	const { res } = req;
-	const userData = await user.getUserFields(data.uid, ['uid', 'username', 'picture', 'reputation', 'postcount', 'banned']);
+	const userData = await user.getUserFields(data.uid, [
+		'uid',
+		'username',
+		'picture',
+		'reputation',
+		'postcount',
+		'banned',
+	]);
 	userData.groups = (await groups.getUserGroups([data.uid])).pop();
 	const token = jwt.sign(userData, plugin.settings.secret);
 
@@ -617,7 +760,9 @@ plugin.saveReverseToken = async ({ req, userData: data }) => {
 		domain: plugin.settings.cookieDomain,
 	});
 
-	winston.info(`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`);
+	winston.info(
+		`[plugins/session-sharing] Saving reverse cookie for uid ${userData.uid}, session: ${req.session.id}`,
+	);
 };
 
 module.exports = plugin;

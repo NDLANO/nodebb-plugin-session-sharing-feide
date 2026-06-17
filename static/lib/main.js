@@ -19,7 +19,6 @@ $(document).ready(function () {
 		}
 
 		if (!whitelisted) {
-			// eslint-disable-next-line no-console
 			console.log(
 				'[session-sharing] host not whitelisted',
 				window && window.location && window.location.host,
@@ -137,7 +136,6 @@ $(document).ready(function () {
 			url = url.replace('%1', encodeURIComponent(lastUrl));
 		} catch (e) {
 			const origin = window.location.origin;
-			// eslint-disable-next-line no-console
 			console.log(
 				'[session-sharing] cannot replace %1 with ' +
 					lastUrl +
@@ -149,7 +147,6 @@ $(document).ready(function () {
 			url = url.replace('%1', encodeURIComponent(origin));
 		}
 
-		// eslint-disable-next-line no-console
 		console.log('[session-sharing] redirecting to: ' + url);
 		window.location.href = url;
 	}
