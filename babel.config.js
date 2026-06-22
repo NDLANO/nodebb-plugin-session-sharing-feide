@@ -1,4 +1,3 @@
-module.exports = {
-  presets: ['@babel/preset-typescript'],
-  plugins: [],
-};
+'use strict';
+
+module.exports = { presets: ['@babel/preset-typescript'], plugins: [] };
